@@ -20,6 +20,10 @@ object ApiEndpoints {
     const val RIDER_AVAILABILITY = "/rider/availability"
     const val RIDER_LOCATION = "/rider/location"
     const val RIDER_DELIVERIES_ACTIVE = "/rider/deliveries/active"
+    const val RIDER_NOTIFICATIONS = "/rider/notifications"
+    const val RIDER_NOTIFICATIONS_READ_ALL = "/rider/notifications/read-all"
+    const val RIDER_WALLET = "/rider/wallet"
+    const val RIDER_WALLET_WITHDRAW = "/rider/wallet/withdraw"
 
     fun deliveryDetail(id: Int): String = "/rider/deliveries/$id"
     fun deliveryRespond(id: Int): String = "/rider/deliveries/$id/respond"
@@ -28,4 +32,5 @@ object ApiEndpoints {
     fun deliveryComplete(id: Int): String = "/rider/deliveries/$id/complete"
     fun deliveryFail(id: Int): String = "/rider/deliveries/$id/fail"
     fun deliveryNavigation(id: Int): String = "/rider/deliveries/$id/navigation"
+    fun notificationRead(id: String): String = "/rider/notifications/$id/read"
 }

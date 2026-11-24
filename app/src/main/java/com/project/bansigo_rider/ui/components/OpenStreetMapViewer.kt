@@ -3,16 +3,13 @@ package com.project.bansigo_rider.ui.components
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
+import android.view.MotionEvent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,45 +25,56 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CloseFullscreen
 import androidx.compose.material.icons.filled.Directions
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.NearMe
+import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.material.icons.filled.Straight
+import androidx.compose.material.icons.filled.TurnLeft
+import androidx.compose.material.icons.filled.TurnRight
+import androidx.compose.material.icons.filled.TurnSlightLeft
+import androidx.compose.material.icons.filled.TurnSlightRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.Fill
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.project.bansigo_rider.core.config.AppConfig
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.project.bansigo_rider.core.models.GeoPoint
 import com.project.bansigo_rider.core.models.NavigationStep
 import com.project.bansigo_rider.ui.theme.*
-import kotlin.math.*
+import org.osmdroid.config.Configuration
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.util.BoundingBox
+import org.osmdroid.views.CustomZoomButtonsController
+import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.Polyline
+import java.io.File
+import org.osmdroid.util.GeoPoint as OsmGeoPoint
 
 @Composable
 fun OpenStreetMapViewer(
@@ -79,238 +87,265 @@ fun OpenStreetMapViewer(
     estimatedMinutes: Int? = null,
     distanceM: Int? = null,
     routingAlgorithm: String? = null,
+    isExpanded: Boolean = false,
+    onToggleExpand: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    var showFullScreen by remember { mutableStateOf(false) }
 
-    // Interactive zoom and pan
-    var zoomScale by remember { mutableFloatStateOf(1f) }
-    var panOffsetX by remember { mutableFloatStateOf(0f) }
-    var panOffsetY by remember { mutableFloatStateOf(0f) }
-    var showShadedCorridor by remember { mutableStateOf(true) }
-
-    // Pulsing beacon animation for rider position
-    val infiniteTransition = rememberInfiniteTransition(label = "rider_pulse")
-    val pulseFraction by infiniteTransition.animateFloat(
-        initialValue = 0.8f,
-        targetValue = 1.6f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1400, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulse_scale"
+    OpenStreetMapContent(
+        context = context,
+        pickupLocation = pickupLocation,
+        dropoffLocation = dropoffLocation,
+        riderLocation = riderLocation,
+        otherDropoffs = otherDropoffs,
+        routeWaypoints = routeWaypoints,
+        currentStep = currentStep,
+        estimatedMinutes = estimatedMinutes,
+        distanceM = distanceM,
+        routingAlgorithm = routingAlgorithm,
+        isExpanded = isExpanded,
+        onToggleExpand = onToggleExpand ?: { showFullScreen = !showFullScreen },
+        modifier = modifier
     )
 
-    // Center calculation covering pickup, primary dropoff, other active dropoffs, and rider
-    val allPoints = remember(pickupLocation, dropoffLocation, riderLocation, otherDropoffs, routeWaypoints) {
-        mutableListOf<GeoPoint>().apply {
-            add(pickupLocation)
-            add(dropoffLocation)
-            riderLocation?.let { add(it) }
-            addAll(otherDropoffs)
-            addAll(routeWaypoints)
+    if (showFullScreen && onToggleExpand == null) {
+        Dialog(
+            onDismissRequest = { showFullScreen = false },
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = false
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+            ) {
+                OpenStreetMapContent(
+                    context = context,
+                    pickupLocation = pickupLocation,
+                    dropoffLocation = dropoffLocation,
+                    riderLocation = riderLocation,
+                    otherDropoffs = otherDropoffs,
+                    routeWaypoints = routeWaypoints,
+                    currentStep = currentStep,
+                    estimatedMinutes = estimatedMinutes,
+                    distanceM = distanceM,
+                    routingAlgorithm = routingAlgorithm,
+                    isExpanded = true,
+                    onToggleExpand = { showFullScreen = false },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun OpenStreetMapContent(
+    context: Context,
+    pickupLocation: GeoPoint,
+    dropoffLocation: GeoPoint,
+    riderLocation: GeoPoint?,
+    otherDropoffs: List<GeoPoint>,
+    routeWaypoints: List<GeoPoint>,
+    currentStep: NavigationStep?,
+    estimatedMinutes: Int?,
+    distanceM: Int?,
+    routingAlgorithm: String?,
+    isExpanded: Boolean,
+    onToggleExpand: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var showShadedCorridor by remember { mutableStateOf(true) }
+    var hasFittedBounds by remember { mutableStateOf(false) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    remember(context) {
+        Configuration.getInstance().apply {
+            userAgentValue = context.packageName
+            osmdroidBasePath = File(context.cacheDir, "osmdroid")
+            osmdroidTileCache = File(context.cacheDir, "osmdroid/tiles")
+        }
+        true
+    }
+
+    val mapView = remember {
+        MapView(context).apply {
+            setTileSource(TileSourceFactory.MAPNIK)
+            setMultiTouchControls(true)
+            zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
+            minZoomLevel = 4.0
+            maxZoomLevel = 20.0
+            // Allow smooth panning inside ScrollView / LazyColumn
+            setOnTouchListener { view, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+                        view.parent?.requestDisallowInterceptTouchEvent(true)
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        view.parent?.requestDisallowInterceptTouchEvent(false)
+                    }
+                }
+                false
+            }
         }
     }
 
-    val minLat = allPoints.minOfOrNull { it.latitude } ?: AppConfig.SUPERMARKET_LATITUDE
-    val maxLat = allPoints.maxOfOrNull { it.latitude } ?: AppConfig.SUPERMARKET_LATITUDE
-    val minLon = allPoints.minOfOrNull { it.longitude } ?: AppConfig.SUPERMARKET_LONGITUDE
-    val maxLon = allPoints.maxOfOrNull { it.longitude } ?: AppConfig.SUPERMARKET_LONGITUDE
+    DisposableEffect(lifecycleOwner, mapView) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> mapView.onResume()
+                Lifecycle.Event.ON_PAUSE -> mapView.onPause()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            mapView.onDetach()
+        }
+    }
 
-    val centerLat = (minLat + maxLat) / 2.0
-    val centerLon = (minLon + maxLon) / 2.0
+    fun fitAllMarkers() {
+        val allPts = buildList {
+            add(OsmGeoPoint(pickupLocation.latitude, pickupLocation.longitude))
+            add(OsmGeoPoint(dropoffLocation.latitude, dropoffLocation.longitude))
+            riderLocation?.let { add(OsmGeoPoint(it.latitude, it.longitude)) }
+            otherDropoffs.forEach { add(OsmGeoPoint(it.latitude, it.longitude)) }
+            routeWaypoints.forEach { add(OsmGeoPoint(it.latitude, it.longitude)) }
+        }
+        if (allPts.size >= 2) {
+            try {
+                val box = BoundingBox.fromGeoPoints(allPts)
+                mapView.post {
+                    try {
+                        mapView.zoomToBoundingBox(box, true, 96)
+                    } catch (_: Exception) {
+                        mapView.controller.setCenter(box.centerWithDateLine)
+                        mapView.controller.setZoom(15.0)
+                    }
+                }
+            } catch (_: Exception) {
+                mapView.controller.setCenter(allPts.first())
+                mapView.controller.setZoom(15.0)
+            }
+        } else if (allPts.isNotEmpty()) {
+            mapView.controller.setCenter(allPts.first())
+            mapView.controller.setZoom(16.0)
+        }
+    }
+
+    val containerModifier = if (isExpanded) {
+        modifier.fillMaxSize()
+    } else {
+        modifier
+            .fillMaxWidth()
+            .height(310.dp)
+            .clip(RoundedCornerShape(18.dp))
+    }
 
     Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(300.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(Color(0xFFE8EFEA))
-            .pointerInput(Unit) {
-                detectTransformGestures { _, pan, zoom, _ ->
-                    zoomScale = (zoomScale * zoom).coerceIn(0.5f, 4.0f)
-                    panOffsetX += pan.x
-                    panOffsetY += pan.y
-                }
-            }
+        modifier = containerModifier.background(Color(0xFFE8EFEA))
     ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val canvasWidth = size.width
-            val canvasHeight = size.height
+        AndroidView(
+            factory = { mapView },
+            modifier = Modifier.fillMaxSize(),
+            update = { mv ->
+                mv.overlays.clear()
 
-            val latSpan = max(0.007, (maxLat - minLat) * 1.55)
-            val lonSpan = max(0.007, (maxLon - minLon) * 1.55)
-
-            fun projectToCanvas(lat: Double, lon: Double): Offset {
-                val relX = ((lon - centerLon) / lonSpan).toFloat()
-                val relY = ((centerLat - lat) / latSpan).toFloat()
-
-                val screenX = (canvasWidth / 2f) + (relX * canvasWidth * zoomScale) + panOffsetX
-                val screenY = (canvasHeight / 2f) + (relY * canvasHeight * zoomScale) + panOffsetY
-                return Offset(screenX, screenY)
-            }
-
-            // 1. Draw OpenStreetMap style road canvas grid
-            drawMapGrid(canvasWidth, canvasHeight, panOffsetX, panOffsetY, zoomScale)
-
-            // 2. Draw Dijkstra / A* route with SHADED corridor
-            if (routeWaypoints.size >= 2) {
-                val routePath = Path()
-                val first = projectToCanvas(routeWaypoints[0].latitude, routeWaypoints[0].longitude)
-                routePath.moveTo(first.x, first.y)
-
-                for (i in 1 until routeWaypoints.size) {
-                    val pt = projectToCanvas(routeWaypoints[i].latitude, routeWaypoints[i].longitude)
-                    routePath.lineTo(pt.x, pt.y)
+                val pts = if (routeWaypoints.size >= 2) {
+                    routeWaypoints.map { OsmGeoPoint(it.latitude, it.longitude) }
+                } else {
+                    listOf(
+                        OsmGeoPoint(pickupLocation.latitude, pickupLocation.longitude),
+                        OsmGeoPoint(dropoffLocation.latitude, dropoffLocation.longitude)
+                    )
                 }
 
                 if (showShadedCorridor) {
-                    // Layer A: Wide outer soft translucent shaded corridor
-                    drawPath(
-                        path = routePath,
-                        color = RoyalNavy.copy(alpha = 0.12f),
-                        style = Stroke(
-                            width = 28f * zoomScale.coerceIn(0.7f, 1.6f),
-                            cap = StrokeCap.Round,
-                            join = StrokeJoin.Round
-                        )
-                    )
-
-                    // Layer B: Medium shaded buffer corridor
-                    drawPath(
-                        path = routePath,
-                        color = RoyalNavy.copy(alpha = 0.25f),
-                        style = Stroke(
-                            width = 14f * zoomScale.coerceIn(0.7f, 1.5f),
-                            cap = StrokeCap.Round,
-                            join = StrokeJoin.Round
-                        )
-                    )
+                    val haloLine = Polyline(mv).apply {
+                        setPoints(pts)
+                        outlinePaint.color = RoyalNavy.copy(alpha = 0.22f).toArgb()
+                        outlinePaint.strokeWidth = 22f
+                        outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
+                        outlinePaint.strokeJoin = android.graphics.Paint.Join.ROUND
+                    }
+                    mv.overlays.add(haloLine)
                 }
 
-                // Layer C: Core road route polyline
-                drawPath(
-                    path = routePath,
-                    color = RoyalNavy,
-                    style = Stroke(
-                        width = 6f * zoomScale.coerceIn(0.8f, 1.4f),
-                        cap = StrokeCap.Round,
-                        join = StrokeJoin.Round
-                    )
-                )
-
-                // Layer D: Center dash accent for directional visibility
-                drawPath(
-                    path = routePath,
-                    color = BansiGreenLight,
-                    style = Stroke(
-                        width = 2f,
-                        cap = StrokeCap.Round,
-                        join = StrokeJoin.Round,
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 8f))
-                    )
-                )
-            } else {
-                // Fallback direct path
-                val p1 = projectToCanvas(pickupLocation.latitude, pickupLocation.longitude)
-                val p2 = projectToCanvas(dropoffLocation.latitude, dropoffLocation.longitude)
-
-                if (showShadedCorridor) {
-                    drawLine(
-                        color = RoyalNavy.copy(alpha = 0.15f),
-                        start = p1,
-                        end = p2,
-                        strokeWidth = 20f,
-                        cap = StrokeCap.Round
-                    )
+                val mainLine = Polyline(mv).apply {
+                    setPoints(pts)
+                    outlinePaint.color = RoyalNavy.toArgb()
+                    outlinePaint.strokeWidth = 10f
+                    outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
+                    outlinePaint.strokeJoin = android.graphics.Paint.Join.ROUND
                 }
-                drawLine(
-                    color = RoyalNavy,
-                    start = p1,
-                    end = p2,
-                    strokeWidth = 4.5f,
-                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(16f, 10f))
-                )
+                mv.overlays.add(mainLine)
+
+                // Other batched dropoffs
+                otherDropoffs.forEachIndexed { index, pt ->
+                    val marker = Marker(mv).apply {
+                        position = OsmGeoPoint(pt.latitude, pt.longitude)
+                        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                        title = "Stop #${index + 2}: ${pt.name}"
+                        icon = createPinDrawable(context, Color(0xFFF59E0B).toArgb(), SurfaceLight.toArgb(), 34)
+                    }
+                    mv.overlays.add(marker)
+                }
+
+                // Store pickup marker
+                val storeMarker = Marker(mv).apply {
+                    position = OsmGeoPoint(pickupLocation.latitude, pickupLocation.longitude)
+                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                    title = "Pickup: ${pickupLocation.name}"
+                    icon = createPinDrawable(context, RoyalNavy.toArgb(), BansiGreen.toArgb(), 40)
+                }
+                mv.overlays.add(storeMarker)
+
+                // Primary customer dropoff marker
+                val dropMarker = Marker(mv).apply {
+                    position = OsmGeoPoint(dropoffLocation.latitude, dropoffLocation.longitude)
+                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                    title = "Dropoff: ${dropoffLocation.name}"
+                    icon = createPinDrawable(context, BansiCrimson.toArgb(), SurfaceLight.toArgb(), 44)
+                }
+                mv.overlays.add(dropMarker)
+
+                // Live rider GPS marker
+                riderLocation?.let { loc ->
+                    val riderMarker = Marker(mv).apply {
+                        position = OsmGeoPoint(loc.latitude, loc.longitude)
+                        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                        title = "Your Live Position"
+                        icon = createPinDrawable(context, BansiGreenDark.toArgb(), SurfaceLight.toArgb(), 42)
+                    }
+                    mv.overlays.add(riderMarker)
+                }
+
+                if (!hasFittedBounds) {
+                    hasFittedBounds = true
+                    fitAllMarkers()
+                }
+                mv.invalidate()
             }
-
-            // 3. Draw Other Active Drop-Off Points (when rider has multiple deliveries)
-            otherDropoffs.forEachIndexed { index, otherPt ->
-                val otherPos = projectToCanvas(otherPt.latitude, otherPt.longitude)
-                // Numbered multi-delivery pin
-                drawCircle(
-                    color = Color(0xFFF59E0B),
-                    radius = 11f * zoomScale.coerceIn(0.8f, 1.25f),
-                    center = otherPos
-                )
-                drawCircle(
-                    color = SurfaceLight,
-                    radius = 5f * zoomScale.coerceIn(0.8f, 1.25f),
-                    center = otherPos
-                )
-            }
-
-            // 4. Draw Bansi Supermarket Pickup Dock Marker
-            val storePos = projectToCanvas(pickupLocation.latitude, pickupLocation.longitude)
-            drawCircle(
-                color = RoyalNavy,
-                radius = 13f * zoomScale.coerceIn(0.8f, 1.3f),
-                center = storePos
-            )
-            drawCircle(
-                color = SurfaceLight,
-                radius = 6f * zoomScale.coerceIn(0.8f, 1.3f),
-                center = storePos
-            )
-            drawCircle(
-                color = BansiGreen,
-                radius = 3f * zoomScale.coerceIn(0.8f, 1.3f),
-                center = storePos
-            )
-
-            // 5. Draw Primary Customer Drop-off Marker
-            val customerPos = projectToCanvas(dropoffLocation.latitude, dropoffLocation.longitude)
-            // Outer beacon ring
-            drawCircle(
-                color = BansiCrimson.copy(alpha = 0.25f),
-                radius = 18f * zoomScale.coerceIn(0.8f, 1.3f),
-                center = customerPos
-            )
-            drawCircle(
-                color = BansiCrimson,
-                radius = 13f * zoomScale.coerceIn(0.8f, 1.3f),
-                center = customerPos
-            )
-            drawCircle(
-                color = SurfaceLight,
-                radius = 5.5f * zoomScale.coerceIn(0.8f, 1.3f),
-                center = customerPos
-            )
-
-            // 6. Draw Live Rider Position Marker with pulsing beacon
-            val activeRiderPos = riderLocation?.let { projectToCanvas(it.latitude, it.longitude) } ?: storePos
-            drawCircle(
-                color = BansiGreen.copy(alpha = 0.25f * (2f - pulseFraction).coerceIn(0.1f, 0.4f)),
-                radius = 24f * pulseFraction * zoomScale.coerceIn(0.8f, 1.3f),
-                center = activeRiderPos
-            )
-            drawCircle(
-                color = BansiGreenDark,
-                radius = 10f * zoomScale.coerceIn(0.8f, 1.3f),
-                center = activeRiderPos
-            )
-            drawCircle(
-                color = SurfaceLight,
-                radius = 4f * zoomScale.coerceIn(0.8f, 1.3f),
-                center = activeRiderPos
-            )
-        }
+        )
 
         // Top Navigation HUD / Turn Maneuver Overlay
         if (currentStep != null || distanceM != null) {
+            val cleanStreet = currentStep?.streetName
+                ?.takeIf { it.isNotBlank() && it.lowercase() != "null" }
+                ?: "Migori Road Network"
+            val cleanInstruction = currentStep?.instruction
+                ?.takeIf { it.isNotBlank() && it.lowercase() != "null" }
+                ?: "Follow OpenStreetMap Route"
+
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(10.dp)
+                    .padding(horizontal = 10.dp, vertical = if (isExpanded) 36.dp else 10.dp)
                     .align(Alignment.TopCenter),
                 shape = RoundedCornerShape(14.dp),
                 color = RoyalNavyDark.copy(alpha = 0.94f),
@@ -332,7 +367,7 @@ fun OpenStreetMapViewer(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.NearMe,
+                                imageVector = maneuverIconFor(currentStep?.type ?: "straight"),
                                 contentDescription = null,
                                 tint = BansiGreen,
                                 modifier = Modifier.size(20.dp)
@@ -341,15 +376,15 @@ fun OpenStreetMapViewer(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = currentStep?.instruction ?: "Follow OpenStreetMap Route",
+                                text = cleanInstruction,
                                 color = SurfaceLight,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1
                             )
                             Text(
-                                text = currentStep?.streetName?.ifBlank { "Migori Road Network" } ?: "Migori Road Network",
-                                color = SurfaceLight.copy(alpha = 0.75f),
+                                text = cleanStreet,
+                                color = SurfaceLight.copy(alpha = 0.78f),
                                 fontSize = 11.sp,
                                 maxLines = 1
                             )
@@ -377,33 +412,20 @@ fun OpenStreetMapViewer(
             }
         }
 
-        // Top Right: Routing Algorithm Badge
-        routingAlgorithm?.let { algo ->
-            Surface(
-                modifier = Modifier
-                    .padding(top = 60.dp, end = 10.dp)
-                    .align(Alignment.TopEnd),
-                shape = RoundedCornerShape(8.dp),
-                color = Color.Black.copy(alpha = 0.6f)
-            ) {
-                Text(
-                    text = algo.uppercase(),
-                    color = BansiGreen,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
-                )
-            }
-        }
-
-        // Bottom Map Controls: Center, Toggle Shaded Route, Zoom +, Zoom -, External Nav
+        // Bottom Map Controls: Expand/Collapse, Shaded Corridor, Center, Zoom +, Zoom -, External Nav
         Column(
             modifier = Modifier
-                .padding(10.dp)
+                .padding(horizontal = 10.dp, vertical = if (isExpanded) 28.dp else 10.dp)
                 .align(Alignment.BottomEnd),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            // Toggle Shaded Route Corridor
+            MapControlButton(
+                icon = if (isExpanded) Icons.Default.CloseFullscreen else Icons.Default.OpenInFull,
+                contentDescription = if (isExpanded) "Collapse Map" else "Expand Map",
+                tint = RoyalNavy,
+                onClick = onToggleExpand
+            )
+
             MapControlButton(
                 icon = Icons.Default.Layers,
                 contentDescription = "Toggle Shaded Corridor",
@@ -411,32 +433,24 @@ fun OpenStreetMapViewer(
                 onClick = { showShadedCorridor = !showShadedCorridor }
             )
 
-            // Recenter
             MapControlButton(
                 icon = Icons.Default.MyLocation,
                 contentDescription = "Center Map",
-                onClick = {
-                    zoomScale = 1f
-                    panOffsetX = 0f
-                    panOffsetY = 0f
-                }
+                onClick = { fitAllMarkers() }
             )
 
-            // Zoom In
             MapControlButton(
                 icon = Icons.Default.Add,
                 contentDescription = "Zoom In",
-                onClick = { zoomScale = (zoomScale * 1.25f).coerceAtMost(4.0f) }
+                onClick = { mapView.controller.zoomIn() }
             )
 
-            // Zoom Out
             MapControlButton(
                 icon = Icons.Default.Remove,
                 contentDescription = "Zoom Out",
-                onClick = { zoomScale = (zoomScale / 1.25f).coerceAtLeast(0.5f) }
+                onClick = { mapView.controller.zoomOut() }
             )
 
-            // Open in External Map App (Google Maps, OsmAnd, Maps.me)
             MapControlButton(
                 icon = Icons.Default.Directions,
                 contentDescription = "Open in Maps App",
@@ -455,7 +469,7 @@ fun OpenStreetMapViewer(
         // Bottom Left: Attribution & Multi-Order Legend
         Column(
             modifier = Modifier
-                .padding(8.dp)
+                .padding(horizontal = 8.dp, vertical = if (isExpanded) 28.dp else 8.dp)
                 .align(Alignment.BottomStart),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
@@ -489,9 +503,51 @@ fun OpenStreetMapViewer(
     }
 }
 
+private fun maneuverIconFor(type: String): ImageVector {
+    return when (type.lowercase()) {
+        "turn_left", "sharp_left" -> Icons.Default.TurnLeft
+        "turn_right", "sharp_right" -> Icons.Default.TurnRight
+        "slight_left" -> Icons.Default.TurnSlightLeft
+        "slight_right" -> Icons.Default.TurnSlightRight
+        "straight" -> Icons.Default.Straight
+        else -> Icons.Default.NearMe
+    }
+}
+
+private fun createPinDrawable(
+    context: Context,
+    outerColor: Int,
+    innerColor: Int,
+    sizePx: Int
+): BitmapDrawable {
+    val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val radius = sizePx / 2f
+
+    val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.WHITE
+        style = Paint.Style.FILL
+    }
+    canvas.drawCircle(radius, radius, radius, borderPaint)
+
+    val outerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = outerColor
+        style = Paint.Style.FILL
+    }
+    canvas.drawCircle(radius, radius, radius * 0.82f, outerPaint)
+
+    val innerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = innerColor
+        style = Paint.Style.FILL
+    }
+    canvas.drawCircle(radius, radius, radius * 0.36f, innerPaint)
+
+    return BitmapDrawable(context.resources, bitmap)
+}
+
 @Composable
 private fun MapControlButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     contentDescription: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -514,43 +570,6 @@ private fun MapControlButton(
                 modifier = Modifier.size(17.dp)
             )
         }
-    }
-}
-
-private fun DrawScope.drawMapGrid(
-    width: Float,
-    height: Float,
-    panX: Float,
-    panY: Float,
-    scale: Float
-) {
-    val spacing = 45f * scale.coerceIn(0.7f, 2.0f)
-    val gridColor = Color(0xFFD6E2D9)
-
-    var x = (panX % spacing)
-    while (x < width) {
-        if (x >= 0) {
-            drawLine(
-                color = gridColor,
-                start = Offset(x, 0f),
-                end = Offset(x, height),
-                strokeWidth = 1f
-            )
-        }
-        x += spacing
-    }
-
-    var y = (panY % spacing)
-    while (y < height) {
-        if (y >= 0) {
-            drawLine(
-                color = gridColor,
-                start = Offset(0f, y),
-                end = Offset(width, y),
-                strokeWidth = 1f
-            )
-        }
-        y += spacing
     }
 }
 

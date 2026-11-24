@@ -183,69 +183,6 @@ fun OptionsPaymentMethodsSection(
                 }
             }
 
-            // Channel 2: Bank Transfer (Coming Soon)
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(InputBackground, RoundedCornerShape(18.dp))
-                    .border(1.dp, BorderLight, RoundedCornerShape(18.dp))
-                    .padding(18.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(46.dp)
-                                .background(Color(0xFFE5E7EB), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.AccountBalance,
-                                contentDescription = "Bank Transfer",
-                                tint = TextSecondary,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(14.dp))
-
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = "Bank EFT / PesaLink",
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = TextSecondary
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .background(Color(0xFFE5E7EB), RoundedCornerShape(6.dp))
-                                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                                ) {
-                                    Text(
-                                        text = "COMING SOON",
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = TextSecondary
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "KCB, Equity Bank, Co-operative Bank",
-                                fontSize = 12.sp,
-                                color = TextSecondary
-                            )
-                        }
-                    }
-                }
-            }
-
             // Security note
             Box(
                 modifier = Modifier

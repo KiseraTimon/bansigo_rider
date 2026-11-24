@@ -42,17 +42,19 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.project.bansigo_rider.core.storage.SessionManager
 import com.project.bansigo_rider.ui.theme.*
 
 @Composable
 fun OptionsPreferencesSection(
+    sessionManager: SessionManager,
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var soundEnabled by remember { mutableStateOf(true) }
-    var vibrationEnabled by remember { mutableStateOf(true) }
-    var lowDataMode by remember { mutableStateOf(true) }
-    var autoRecenterMap by remember { mutableStateOf(true) }
+    var soundEnabled by remember { mutableStateOf(sessionManager.isSoundEnabled()) }
+    var vibrationEnabled by remember { mutableStateOf(sessionManager.isVibrationEnabled()) }
+    var lowDataMode by remember { mutableStateOf(sessionManager.isLowDataMode()) }
+    var autoRecenterMap by remember { mutableStateOf(sessionManager.isAutoRecenterMap()) }
 
     val scrollState = rememberScrollState()
 
@@ -95,7 +97,10 @@ fun OptionsPreferencesSection(
                         title = "Sound Chime on Offer",
                         subtitle = "Audible ringing alert when an incoming dispatch offer is found",
                         checked = soundEnabled,
-                        onCheckedChange = { soundEnabled = it }
+                        onCheckedChange = {
+                            soundEnabled = it
+                            sessionManager.setSoundEnabled(it)
+                        }
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -107,7 +112,10 @@ fun OptionsPreferencesSection(
                         title = "Vibrate on Incoming Offer",
                         subtitle = "Continuous haptic vibration pattern for pocket detection while driving",
                         checked = vibrationEnabled,
-                        onCheckedChange = { vibrationEnabled = it }
+                        onCheckedChange = {
+                            vibrationEnabled = it
+                            sessionManager.setVibrationEnabled(it)
+                        }
                     )
                 }
             }
@@ -133,7 +141,10 @@ fun OptionsPreferencesSection(
                         title = "Low-Bandwidth Mode (2G / 3G)",
                         subtitle = "Compresses network telemetry payloads and disables unnecessary animations",
                         checked = lowDataMode,
-                        onCheckedChange = { lowDataMode = it }
+                        onCheckedChange = {
+                            lowDataMode = it
+                            sessionManager.setLowDataMode(it)
+                        }
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -145,7 +156,10 @@ fun OptionsPreferencesSection(
                         title = "Auto-Recenter Navigation",
                         subtitle = "Automatically re-centers OpenStreetMap viewport on your GPS coordinate",
                         checked = autoRecenterMap,
-                        onCheckedChange = { autoRecenterMap = it }
+                        onCheckedChange = {
+                            autoRecenterMap = it
+                            sessionManager.setAutoRecenterMap(it)
+                        }
                     )
                 }
             }

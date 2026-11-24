@@ -63,6 +63,7 @@ fun OptionsAccountSettingsSection(
     sessionManager: SessionManager,
     apiClient: ApiClient,
     onBackClick: () -> Unit,
+    onNavigateToEmailVerification: (String) -> Unit = {},
     onProfileUpdated: (UserProfile) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -77,15 +78,9 @@ fun OptionsAccountSettingsSection(
 
     var isSaving by remember { mutableStateOf(false) }
     var isSendingOtp by remember { mutableStateOf(false) }
-    var isConfirmingOtp by remember { mutableStateOf(false) }
 
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var isError by remember { mutableStateOf(false) }
-
-    // Dialog state for email OTP verification
-    var showEmailOtpDialog by remember { mutableStateOf(false) }
-    var emailOtpInput by remember { mutableStateOf("") }
-    var otpMessage by remember { mutableStateOf<String?>(null) }
 
     // Dialog state for phone verification
     var showPhoneOtpDialog by remember { mutableStateOf(false) }
@@ -471,8 +466,7 @@ fun OptionsAccountSettingsSection(
                                             val res = apiClient.requestEmailVerification()
                                             isSendingOtp = false
                                             if (res.isSuccess) {
-                                                showEmailOtpDialog = true
-                                                otpMessage = "Verification OTP has been sent to $email"
+                                                onNavigateToEmailVerification(email.trim())
                                             } else {
                                                 isError = true
                                                 statusMessage = res.exceptionOrNull()?.message ?: "Could not send verification code"
@@ -542,86 +536,6 @@ fun OptionsAccountSettingsSection(
 
             Spacer(modifier = Modifier.height(16.dp))
         }
-    }
-
-    // Email OTP Dialog
-    if (showEmailOtpDialog) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showEmailOtpDialog = false },
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.MarkEmailRead,
-                        contentDescription = null,
-                        tint = RoyalNavy,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Verify Email Address",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = RoyalNavy
-                    )
-                }
-            },
-            text = {
-                Column {
-                    Text(
-                        text = "Enter the 6-digit confirmation code sent to $email.",
-                        fontSize = 13.sp,
-                        color = TextSecondary
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    BansiTextField(
-                        value = emailOtpInput,
-                        onValueChange = { emailOtpInput = it },
-                        label = "Verification Code *",
-                        placeholder = "e.g. 123456",
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                    )
-                    otpMessage?.let {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(text = it, fontSize = 11.sp, color = RoyalNavy)
-                    }
-                }
-            },
-            confirmButton = {
-                BansiPrimaryButton(
-                    text = if (isConfirmingOtp) "Verifying..." else "Confirm Code",
-                    onClick = {
-                        if (emailOtpInput.isBlank()) {
-                            otpMessage = "Verification code cannot be blank"
-                            return@BansiPrimaryButton
-                        }
-                        isConfirmingOtp = true
-                        scope.launch {
-                            val res = apiClient.confirmEmailVerification(emailOtpInput.trim())
-                            isConfirmingOtp = false
-                            if (res.isSuccess) {
-                                isEmailVerified = true
-                                sessionManager.setEmailVerified(true)
-                                showEmailOtpDialog = false
-                                statusMessage = "Email verified successfully!"
-                                isError = false
-                                res.getOrNull()?.let { onProfileUpdated(it) }
-                            } else {
-                                otpMessage = res.exceptionOrNull()?.message ?: "Invalid code. Please try again."
-                            }
-                        }
-                    },
-                    modifier = Modifier.width(130.dp),
-                    backgroundColor = BansiGreenDark
-                )
-            },
-            dismissButton = {
-                TextButton(onClick = { showEmailOtpDialog = false }) {
-                    Text("Cancel", color = TextSecondary)
-                }
-            },
-            shape = RoundedCornerShape(16.dp),
-            containerColor = SurfaceLight
-        )
     }
 
     // Phone OTP Dialog

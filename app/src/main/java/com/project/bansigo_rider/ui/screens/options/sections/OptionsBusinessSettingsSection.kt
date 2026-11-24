@@ -91,14 +91,14 @@ fun OptionsBusinessSettingsSection(
                             fontWeight = FontWeight.Bold,
                             color = RoyalNavy
                         )
-                        Text(
-                            text = "Reviewed by Migori dispatch administration",
-                            fontSize = 12.sp,
-                            color = TextSecondary
-                        )
+//                        Text(
+//                            text = "Reviewed by Migori dispatch administration",
+//                            fontSize = 12.sp,
+//                            color = TextSecondary
+//                        )
                     }
 
-                    ApprovalStatusBadge(status = riderProfile?.approvalStatus ?: ApprovalStatus.PENDING)
+                    ApprovalStatusBadge(status = riderProfile?.approvalStatus ?: ApprovalStatus.NEW)
                 }
             }
 
@@ -122,7 +122,7 @@ fun OptionsBusinessSettingsSection(
                     BusinessDetailItem(
                         icon = Icons.Default.Badge,
                         label = "National ID Number",
-                        value = riderProfile?.nationalIdNumber ?: "Not recorded / On file",
+                        value = riderProfile?.nationalIdNumber?.ifBlank { null } ?: "Not submitted",
                         isMuted = riderProfile?.nationalIdNumber.isNullOrBlank()
                     )
 
@@ -132,7 +132,7 @@ fun OptionsBusinessSettingsSection(
                     BusinessDetailItem(
                         icon = Icons.Default.DriveEta,
                         label = "Driving Licence Number",
-                        value = riderProfile?.licenceNumber ?: "Verified in administrative console",
+                        value = riderProfile?.licenceNumber?.ifBlank { null } ?: "Not submitted",
                         isMuted = riderProfile?.licenceNumber.isNullOrBlank()
                     )
 
@@ -142,7 +142,7 @@ fun OptionsBusinessSettingsSection(
                     BusinessDetailItem(
                         icon = Icons.Default.CalendarToday,
                         label = "Licence Expiry Date",
-                        value = riderProfile?.licenceExpiry ?: "N/A (Bicycle or Fleet Record)",
+                        value = riderProfile?.licenceExpiry?.ifBlank { null } ?: "Not submitted",
                         isMuted = riderProfile?.licenceExpiry.isNullOrBlank()
                     )
                 }
@@ -177,7 +177,7 @@ fun OptionsBusinessSettingsSection(
                     BusinessDetailItem(
                         icon = Icons.Default.Badge,
                         label = "Registration Number Plate",
-                        value = riderProfile?.vehiclePlate ?: "Pending Documentation",
+                        value = riderProfile?.vehiclePlate?.ifBlank { null } ?: "Not submitted",
                         isMuted = riderProfile?.vehiclePlate.isNullOrBlank()
                     )
 

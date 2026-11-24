@@ -56,16 +56,18 @@ import com.project.bansigo_rider.ui.theme.*
 fun DeliveryActionsSection(
     delivery: DeliveryDetail,
     isActionLoading: Boolean,
-    onPickup: () -> Unit,
+    onPickup: (pickupCode: String) -> Unit,
     onArrive: () -> Unit,
     onComplete: (handoverCode: String, idChecked: Boolean, cashCollected: Double?) -> Unit,
     onFail: (reason: String) -> Unit,
+    pickupCodeHint: String? = null,
     modifier: Modifier = Modifier
 ) {
     var showFailDialog by remember { mutableStateOf(false) }
     var failReason by remember { mutableStateOf("") }
 
-    // Handover completion states
+    // Store pickup & customer handover completion states
+    var pickupCode by remember { mutableStateOf("") }
     var handoverCode by remember { mutableStateOf("") }
     var idChecked by remember { mutableStateOf(!delivery.requiresIdCheck) }
     var cashCollectedConfirmed by remember { mutableStateOf(delivery.cashToCollect == null) }
@@ -90,15 +92,42 @@ fun DeliveryActionsSection(
             when (delivery.status) {
                 DeliveryStatus.ACCEPTED, DeliveryStatus.ASSIGNED, DeliveryStatus.PENDING -> {
                     Text(
-                        text = "Head to Bansi Mega Supermarket dispatch dock. Confirm order packing before departing.",
+                        text = "Head to Bansi Mega Supermarket dispatch bay and enter the 4-digit store Pickup Code sent to your Notifications.",
                         fontSize = 12.sp,
                         color = TextSecondary
                     )
+                    if (!pickupCodeHint.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFFECFDF5),
+                            border = BorderStroke(1.dp, Color(0xFFA7F3D0)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = pickupCodeHint,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF065F46),
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    BansiTextField(
+                        value = pickupCode,
+                        onValueChange = { if (it.length <= 8) pickupCode = it },
+                        label = "Store Pickup Code",
+                        placeholder = "4-digit code from notification",
+                        leadingIcon = Icons.Default.Pin,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    )
                     Spacer(modifier = Modifier.height(12.dp))
                     BansiPrimaryButton(
-                        text = "Confirm Parcel Picked Up",
+                        text = "Verify Pickup Code & Collect",
                         icon = Icons.Default.ShoppingBag,
-                        onClick = onPickup,
+                        enabled = pickupCode.trim().length in 4..8,
+                        onClick = { onPickup(pickupCode.trim()) },
                         isLoading = isActionLoading
                     )
                 }
@@ -302,6 +331,9 @@ fun DeliveryActionsSection(
 
         AlertDialog(
             onDismissRequest = { showFailDialog = false },
+            containerColor = SurfaceLight,
+            titleContentColor = BansiCrimsonDark,
+            textContentColor = TextPrimary,
             title = {
                 Text(
                     text = "Report Delivery Problem",

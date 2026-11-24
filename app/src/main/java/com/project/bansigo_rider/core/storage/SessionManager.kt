@@ -30,6 +30,10 @@ class SessionManager(context: Context) {
         private const val KEY_VEHICLE_TYPE = "vehicle_type"
         private const val KEY_VEHICLE_PLATE = "vehicle_plate"
         private const val KEY_CUSTOM_API_URL = "custom_api_url"
+        private const val KEY_PREF_SOUND = "pref_sound_enabled"
+        private const val KEY_PREF_VIBRATION = "pref_vibration_enabled"
+        private const val KEY_PREF_LOW_DATA = "pref_low_data_mode"
+        private const val KEY_PREF_AUTO_RECENTER = "pref_auto_recenter_map"
 
         @Volatile
         private var instance: SessionManager? = null
@@ -124,11 +128,11 @@ class SessionManager(context: Context) {
 
     fun getRiderId(): Int = prefs.getInt(KEY_RIDER_ID, -1)
     fun getApprovalStatus(): ApprovalStatus {
-        val raw = prefs.getString(KEY_APPROVAL_STATUS, ApprovalStatus.PENDING.name)
+        val raw = prefs.getString(KEY_APPROVAL_STATUS, ApprovalStatus.NEW.name)
         return try {
-            ApprovalStatus.valueOf(raw ?: ApprovalStatus.PENDING.name)
+            ApprovalStatus.valueOf(raw ?: ApprovalStatus.NEW.name)
         } catch (_: Exception) {
-            ApprovalStatus.PENDING
+            ApprovalStatus.NEW
         }
     }
 
@@ -162,6 +166,18 @@ class SessionManager(context: Context) {
     }
 
     fun getCustomApiUrl(): String? = prefs.getString(KEY_CUSTOM_API_URL, null)
+
+    fun isSoundEnabled(): Boolean = prefs.getBoolean(KEY_PREF_SOUND, true)
+    fun setSoundEnabled(enabled: Boolean) = prefs.edit().putBoolean(KEY_PREF_SOUND, enabled).apply()
+
+    fun isVibrationEnabled(): Boolean = prefs.getBoolean(KEY_PREF_VIBRATION, true)
+    fun setVibrationEnabled(enabled: Boolean) = prefs.edit().putBoolean(KEY_PREF_VIBRATION, enabled).apply()
+
+    fun isLowDataMode(): Boolean = prefs.getBoolean(KEY_PREF_LOW_DATA, true)
+    fun setLowDataMode(enabled: Boolean) = prefs.edit().putBoolean(KEY_PREF_LOW_DATA, enabled).apply()
+
+    fun isAutoRecenterMap(): Boolean = prefs.getBoolean(KEY_PREF_AUTO_RECENTER, true)
+    fun setAutoRecenterMap(enabled: Boolean) = prefs.edit().putBoolean(KEY_PREF_AUTO_RECENTER, enabled).apply()
 
     fun clear() {
         prefs.edit()

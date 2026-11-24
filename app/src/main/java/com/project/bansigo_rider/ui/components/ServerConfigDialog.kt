@@ -215,7 +215,7 @@ fun ServerConfigDialog(
         },
         confirmButton = {
             BansiPrimaryButton(
-                text = "Save & Apply",
+                text = "Save",
                 onClick = {
                     sessionManager.saveCustomApiUrl(customUrl.trim())
                     onSaved()

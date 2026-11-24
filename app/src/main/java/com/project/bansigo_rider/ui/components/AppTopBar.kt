@@ -20,6 +20,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.ElectricMoped
 import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -44,6 +46,8 @@ fun AppTopBar(
     approvalStatus: ApprovalStatus,
     onToggleAvailability: (Boolean) -> Unit,
     onOpenServerConfig: (() -> Unit)? = null,
+    onRefresh: (() -> Unit)? = null,
+    isRefreshing: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -112,8 +116,31 @@ fun AppTopBar(
                 }
             }
 
-            // Right side: Server switcher & Availability Toggle
+            // Right side: Refresh, Server switcher & Availability Toggle
             Row(verticalAlignment = Alignment.CenterVertically) {
+                if (onRefresh != null) {
+                    IconButton(
+                        onClick = onRefresh,
+                        enabled = !isRefreshing,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        if (isRefreshing) {
+                            CircularProgressIndicator(
+                                strokeWidth = 2.dp,
+                                color = RoyalNavy,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Refresh App",
+                                tint = TextSecondary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+
                 if (onOpenServerConfig != null) {
                     IconButton(
                         onClick = onOpenServerConfig,

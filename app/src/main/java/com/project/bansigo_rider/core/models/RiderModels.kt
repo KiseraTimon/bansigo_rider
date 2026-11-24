@@ -2,6 +2,7 @@
 package com.project.bansigo_rider.core.models
 
 enum class ApprovalStatus(val label: String) {
+    NEW("Documents Required"),
     PENDING("Vetting Pending"),
     APPROVED("Approved"),
     REJECTED("Rejected"),
@@ -16,7 +17,7 @@ enum class RiderStatus(val label: String) {
 
 enum class VehicleType(val label: String) {
     BICYCLE("Bicycle"),
-    MOTORCYCLE("Motorcycle (Boda Boda)"),
+    MOTORCYCLE("Motorcycle"),
     TUKTUK("Tuk-Tuk"),
     CAR("Car")
 }
@@ -39,7 +40,12 @@ data class RiderProfile(
     val ratingAverage: Double?,
     val ratingCount: Int = 0,
     val deliveriesCompleted: Int = 0,
-    val lastSeenAt: String? = null
+    val lastSeenAt: String? = null,
+    val unjustifiedRejectionsCount: Int = 0,
+    val totalRejectionsCount: Int = 0,
+    val overdueDeliveriesCount: Int = 0,
+    val penaltyPoints: Int = 0,
+    val dispatchCooldownUntil: String? = null
 )
 
 data class RiderApplyRequest(

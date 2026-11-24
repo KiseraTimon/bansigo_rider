@@ -1,13 +1,24 @@
 // app/src/main/java/com/project/bansigo_rider/MainActivity.kt
 package com.project.bansigo_rider
 
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.Context
+import android.content.pm.PackageManager
+import android.location.Location
+import android.location.LocationManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -95,7 +106,12 @@ fun RiderApp(
     sessionManager: SessionManager,
     apiClient: ApiClient
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { }
 
     var isLoggedIn by remember { mutableStateOf(sessionManager.isLoggedIn()) }
     var currentTab by remember { mutableStateOf(AppTab.HOME) }
@@ -104,29 +120,60 @@ fun RiderApp(
 
     var riderProfile by remember { mutableStateOf<RiderProfile?>(null) }
     var showServerConfigDialog by remember { mutableStateOf(false) }
+    var isRefreshingApp by remember { mutableStateOf(false) }
 
     fun refreshRiderProfile() {
-        if (!isLoggedIn) return
+        if (!isLoggedIn || isRefreshingApp) return
         scope.launch {
-            val result = apiClient.getRiderProfile()
-            if (result.isSuccess) {
-                riderProfile = result.getOrNull()
-            }
-            // Also refresh active deliveries badge
-            val deliveriesRes = apiClient.getActiveDeliveries()
-            if (deliveriesRes.isSuccess) {
-                activeDeliveriesCount = deliveriesRes.getOrNull().orEmpty().count {
-                    it.status != DeliveryStatus.DELIVERED &&
-                    it.status != DeliveryStatus.FAILED &&
-                    it.status != DeliveryStatus.CANCELLED
+            isRefreshingApp = true
+            try {
+                apiClient.getCurrentUser()
+                val result = apiClient.getRiderProfile()
+                if (result.isSuccess) {
+                    riderProfile = result.getOrNull()
                 }
+                // Also refresh active deliveries badge
+                val deliveriesRes = apiClient.getActiveDeliveries()
+                if (deliveriesRes.isSuccess) {
+                    activeDeliveriesCount = deliveriesRes.getOrNull().orEmpty().count {
+                        it.status != DeliveryStatus.DELIVERED &&
+                        it.status != DeliveryStatus.FAILED &&
+                        it.status != DeliveryStatus.CANCELLED
+                    }
+                }
+            } finally {
+                isRefreshingApp = false
             }
         }
     }
 
     LaunchedEffect(isLoggedIn) {
         if (isLoggedIn) {
+            val hasFine = ContextCompat.checkSelfPermission(
+                context, Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!hasFine) {
+                locationPermissionLauncher.launch(
+                    arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                    )
+                )
+            }
             refreshRiderProfile()
+        }
+    }
+
+    // Continuous GPS telemetry ping every 5 seconds while online or fulfilling active deliveries
+    LaunchedEffect(isLoggedIn, riderProfile?.status, activeDeliveriesCount) {
+        val status = riderProfile?.status ?: sessionManager.getRiderStatus()
+        if (!isLoggedIn || (status == RiderStatus.OFFLINE && activeDeliveriesCount == 0)) return@LaunchedEffect
+        while (true) {
+            val loc = getBestLastKnownLocation(context)
+            if (loc != null) {
+                apiClient.updateLocation(loc.latitude, loc.longitude)
+            }
+            delay(5000L)
         }
     }
 
@@ -166,7 +213,9 @@ fun RiderApp(
                                 }
                             }
                         },
-                        onOpenServerConfig = { showServerConfigDialog = true }
+                        onOpenServerConfig = { showServerConfigDialog = true },
+                        onRefresh = { refreshRiderProfile() },
+                        isRefreshing = isRefreshingApp
                     )
                 }
             },
@@ -209,7 +258,8 @@ fun RiderApp(
                                     selectedDeliveryId = null
                                 }
                             },
-                            onOpenServerConfig = { showServerConfigDialog = true }
+                            onOpenServerConfig = { showServerConfigDialog = true },
+                            onRefreshProfile = { refreshRiderProfile() }
                         )
                     }
 
@@ -250,4 +300,26 @@ fun RiderApp(
             }
         }
     }
+}
+
+@SuppressLint("MissingPermission")
+private fun getBestLastKnownLocation(context: Context): Location? {
+    val hasFine = ContextCompat.checkSelfPermission(
+        context, Manifest.permission.ACCESS_FINE_LOCATION
+    ) == PackageManager.PERMISSION_GRANTED
+    val hasCoarse = ContextCompat.checkSelfPermission(
+        context, Manifest.permission.ACCESS_COARSE_LOCATION
+    ) == PackageManager.PERMISSION_GRANTED
+    if (!hasFine && !hasCoarse) return null
+
+    val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return null
+    val providers = lm.getProviders(true)
+    var best: Location? = null
+    for (p in providers) {
+        val l = try { lm.getLastKnownLocation(p) } catch (_: Exception) { null } ?: continue
+        if (best == null || l.accuracy < best.accuracy) {
+            best = l
+        }
+    }
+    return best
 }

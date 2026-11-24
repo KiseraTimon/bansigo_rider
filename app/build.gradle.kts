@@ -55,7 +55,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
-    implementation(libs.ui.text.google.fonts)
+    implementation(libs.osmdroid.android)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

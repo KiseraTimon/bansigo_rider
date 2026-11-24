@@ -46,6 +46,8 @@ build/
 .agents/
 .claude/
 .gemini/
+.codex
+*.idea
 
 
 

@@ -31,15 +31,22 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material.icons.filled.Store
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -68,10 +75,22 @@ fun HomeLiveRadarSection(
     isResponding: Boolean,
     isOnline: Boolean,
     onAcceptOffer: (Int) -> Unit,
-    onDeclineOffer: (Int) -> Unit,
+    onDeclineOffer: (deliveryId: Int, reasonCode: String?, reasonText: String?) -> Unit,
     onOpenDeliveryMission: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var pendingDeclineId by remember { mutableStateOf<Int?>(null) }
+
+    if (pendingDeclineId != null) {
+        DeclineReasonDialog(
+            onDismiss = { pendingDeclineId = null },
+            onConfirmDecline = { code, text ->
+                val targetId = pendingDeclineId!!
+                pendingDeclineId = null
+                onDeclineOffer(targetId, code, text)
+            }
+        )
+    }
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -141,7 +160,7 @@ fun HomeLiveRadarSection(
                         delivery = activeDelivery,
                         isResponding = isResponding,
                         onAccept = { onAcceptOffer(activeDelivery.id) },
-                        onDecline = { onDeclineOffer(activeDelivery.id) }
+                        onDecline = { pendingDeclineId = activeDelivery.id }
                     )
                 }
 
@@ -165,6 +184,91 @@ fun HomeLiveRadarSection(
             }
         }
     }
+}
+
+@Composable
+private fun DeclineReasonDialog(
+    onDismiss: () -> Unit,
+    onConfirmDecline: (reasonCode: String?, reasonText: String?) -> Unit
+) {
+    val reasons = listOf(
+        "vehicle_breakdown" to "Vehicle breakdown / puncture",
+        "medical_emergency" to "Medical or personal emergency",
+        "unsafe_area" to "Route / weather safety hazard",
+        "over_capacity" to "Cargo box at full capacity",
+        "shift_ending" to "Shift ending / battery low",
+        "other" to "Other justified reason",
+        "" to "Decline without reason (incurs penalty)"
+    )
+    var selectedCode by remember { mutableStateOf("vehicle_breakdown") }
+    var noteText by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color.White,
+        titleContentColor = BansiCrimson,
+        textContentColor = TextPrimary,
+        title = {
+            Text(
+                text = "Decline Delivery Offer",
+                fontWeight = FontWeight.Bold,
+                color = BansiCrimson
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = "Rejecting offers while online without a valid cause adds penalty points and may trigger a dispatch cooldown.",
+                    fontSize = 12.sp,
+                    color = TextSecondary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                reasons.forEach { (code, label) ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { selectedCode = code }
+                            .padding(vertical = 2.dp)
+                    ) {
+                        RadioButton(
+                            selected = selectedCode == code,
+                            onClick = { selectedCode = code }
+                        )
+                        Text(text = label, fontSize = 12.5.sp, color = TextPrimary)
+                    }
+                }
+                if (selectedCode == "other" || selectedCode.isNotEmpty()) {
+                    OutlinedTextField(
+                        value = noteText,
+                        onValueChange = { noteText = it },
+                        label = { Text("Details (required for 'Other')") },
+                        singleLine = false,
+                        maxLines = 2,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onConfirmDecline(
+                        selectedCode.ifBlank { null },
+                        noteText.trim().ifBlank { null }
+                    )
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = BansiCrimson)
+            ) {
+                Text("Confirm Decline")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Keep Offer")
+            }
+        }
+    )
 }
 
 @Composable

@@ -18,6 +18,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.ElectricMoped
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -40,6 +42,8 @@ import com.project.bansigo_rider.ui.theme.TextSecondary
 @Composable
 fun HomeBrandingSection(
     onOpenServerConfig: () -> Unit,
+    onRefresh: (() -> Unit)? = null,
+    isRefreshing: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -106,39 +110,76 @@ fun HomeBrandingSection(
                 }
             }
 
-            // Right: Server Config Shortcut
-            Surface(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .clickable { onOpenServerConfig() },
-                shape = RoundedCornerShape(10.dp),
-                color = SurfaceCard,
-                border = androidx.compose.foundation.BorderStroke(1.dp, BorderLight),
-                shadowElevation = 1.dp
+            // Right: Refresh & Server Config Shortcuts
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Box(
+                if (onRefresh != null) {
+                    Surface(
                         modifier = Modifier
-                            .size(7.dp)
-                            .clip(CircleShape)
-                            .background(BansiGreen)
-                    )
-                    Icon(
-                        imageVector = Icons.Default.Dns,
-                        contentDescription = "Server Config",
-                        tint = RoyalNavy,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Text(
-                        text = "API",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = RoyalNavy
-                    )
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable(enabled = !isRefreshing) { onRefresh() },
+                        shape = RoundedCornerShape(10.dp),
+                        color = SurfaceCard,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderLight),
+                        shadowElevation = 1.dp
+                    ) {
+                        Box(
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isRefreshing) {
+                                CircularProgressIndicator(
+                                    strokeWidth = 2.dp,
+                                    color = RoyalNavy,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "Refresh App",
+                                    tint = RoyalNavy,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Surface(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { onOpenServerConfig() },
+                    shape = RoundedCornerShape(10.dp),
+                    color = SurfaceCard,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, BorderLight),
+                    shadowElevation = 1.dp
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(BansiGreen)
+                        )
+                        Icon(
+                            imageVector = Icons.Default.Dns,
+                            contentDescription = "Server Config",
+                            tint = RoyalNavy,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = "API",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = RoyalNavy
+                        )
+                    }
                 }
             }
         }

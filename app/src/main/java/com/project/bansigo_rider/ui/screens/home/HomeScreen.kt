@@ -11,6 +11,19 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import com.project.bansigo_rider.core.models.RiderNotification
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,6 +54,7 @@ import com.project.bansigo_rider.ui.screens.home.sections.HomeSlidingNoticeSecti
 import com.project.bansigo_rider.ui.theme.BackgroundLight
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     sessionManager: SessionManager,
@@ -50,6 +64,7 @@ fun HomeScreen(
     onNavigateToDelivery: (Int) -> Unit,
     onNavigateToTab: (AppTab) -> Unit = {},
     onOpenServerConfig: () -> Unit = {},
+    onRefreshProfile: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -57,9 +72,11 @@ fun HomeScreen(
     val scrollState = rememberScrollState()
 
     var activeDelivery by remember { mutableStateOf<DeliverySummaryItem?>(null) }
+    var notifications by remember { mutableStateOf<List<RiderNotification>>(emptyList()) }
     var isUpdatingStatus by remember { mutableStateOf(false) }
     var isRespondingOffer by remember { mutableStateOf(false) }
     var isSyncingLocation by remember { mutableStateOf(false) }
+    var isRefreshing by remember { mutableStateOf(false) }
 
     var todayCompletedCount by remember { mutableIntStateOf(riderProfile?.deliveriesCompleted ?: 0) }
     var todayEarnings by remember { mutableDoubleStateOf(0.0) }
@@ -67,16 +84,32 @@ fun HomeScreen(
 
     fun refreshDeliveries() {
         scope.launch {
-            val result = apiClient.getActiveDeliveries()
-            if (result.isSuccess) {
-                val list = result.getOrNull().orEmpty()
-                activeDelivery = list.firstOrNull {
-                    it.status != DeliveryStatus.DELIVERED &&
-                    it.status != DeliveryStatus.FAILED &&
-                    it.status != DeliveryStatus.CANCELLED
+            isRefreshing = true
+            try {
+                onRefreshProfile()
+                val result = apiClient.getActiveDeliveries()
+                if (result.isSuccess) {
+                    val list = result.getOrNull().orEmpty()
+                    activeDelivery = list.firstOrNull {
+                        it.status != DeliveryStatus.DELIVERED &&
+                        it.status != DeliveryStatus.FAILED &&
+                        it.status != DeliveryStatus.CANCELLED
+                    }
                 }
-                todayCompletedCount = list.count { it.status == DeliveryStatus.DELIVERED }
-                todayEarnings = list.filter { it.status == DeliveryStatus.DELIVERED }.sumOf { it.riderFee }
+                val walletRes = apiClient.getRiderWallet()
+                if (walletRes.isSuccess) {
+                    walletRes.getOrNull()?.summary?.let { summary ->
+                        todayCompletedCount = summary.completedTripsCount
+                        todayEarnings = summary.todayEarnings
+                        codCollected = summary.codCashInHand
+                    }
+                }
+                val notifRes = apiClient.getNotifications()
+                if (notifRes.isSuccess) {
+                    notifications = notifRes.getOrNull().orEmpty()
+                }
+            } finally {
+                isRefreshing = false
             }
         }
     }
@@ -85,18 +118,48 @@ fun HomeScreen(
         refreshDeliveries()
     }
 
-    Column(
+    // Live dispatch offer & notification polling every 5 seconds while online
+    LaunchedEffect(riderProfile?.status, activeDelivery?.id) {
+        while (true) {
+            delay(5000L)
+            val status = riderProfile?.status ?: sessionManager.getRiderStatus()
+            if (status != RiderStatus.OFFLINE || activeDelivery != null) {
+                val res = apiClient.getActiveDeliveries()
+                if (res.isSuccess) {
+                    activeDelivery = res.getOrNull().orEmpty().firstOrNull {
+                        it.status != DeliveryStatus.DELIVERED &&
+                        it.status != DeliveryStatus.FAILED &&
+                        it.status != DeliveryStatus.CANCELLED
+                    }
+                }
+                val notifRes = apiClient.getNotifications()
+                if (notifRes.isSuccess) {
+                    notifications = notifRes.getOrNull().orEmpty()
+                }
+            }
+        }
+    }
+
+    PullToRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = { refreshDeliveries() },
         modifier = modifier
             .fillMaxSize()
             .background(BackgroundLight)
-            .verticalScroll(scrollState)
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 1. Branding (with 28.dp top margin so elements aren't cramped in fullscreen)
-        HomeBrandingSection(
-            onOpenServerConfig = onOpenServerConfig
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // 1. Branding (with 28.dp top margin so elements aren't cramped in fullscreen)
+            HomeBrandingSection(
+                onOpenServerConfig = onOpenServerConfig,
+                onRefresh = { refreshDeliveries() },
+                isRefreshing = isRefreshing
+            )
 
         // 2. Geolocation (Migori Supermarket Hub, 7.0km zone, GPS Telemetry)
         HomeGeolocationSection(
@@ -151,7 +214,7 @@ fun HomeScreen(
         HomeLiveRadarSection(
             activeDelivery = activeDelivery,
             isResponding = isRespondingOffer,
-            isOnline = (riderProfile?.status ?: sessionManager.getRiderStatus()) == RiderStatus.AVAILABLE,
+            isOnline = (riderProfile?.status ?: sessionManager.getRiderStatus()) != RiderStatus.OFFLINE,
             onAcceptOffer = { deliveryId ->
                 isRespondingOffer = true
                 scope.launch {
@@ -160,14 +223,24 @@ fun HomeScreen(
                     if (res.isSuccess) {
                         refreshDeliveries()
                         onNavigateToDelivery(deliveryId)
+                    } else {
+                        Toast.makeText(context, res.exceptionOrNull()?.localizedMessage ?: "Failed to accept", Toast.LENGTH_SHORT).show()
                     }
                 }
             },
-            onDeclineOffer = { deliveryId ->
+            onDeclineOffer = { deliveryId, reasonCode, reasonText ->
                 isRespondingOffer = true
                 scope.launch {
-                    apiClient.respondToOffer(deliveryId, accept = false)
+                    val res = apiClient.respondToOffer(
+                        deliveryId = deliveryId,
+                        accept = false,
+                        reasonCode = reasonCode,
+                        reasonText = reasonText
+                    )
                     isRespondingOffer = false
+                    if (res.isFailure) {
+                        Toast.makeText(context, res.exceptionOrNull()?.localizedMessage ?: "Decline failed", Toast.LENGTH_SHORT).show()
+                    }
                     refreshDeliveries()
                 }
             },
@@ -175,6 +248,77 @@ fun HomeScreen(
                 onNavigateToDelivery(deliveryId)
             }
         )
+
+        // 5b. Reliability / Cooldown Notice & Recent Notifications (Pickup Codes, SLA Alerts)
+        if ((riderProfile?.penaltyPoints ?: 0) > 0 || riderProfile?.dispatchCooldownUntil != null) {
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = Color(0xFFFEF2F2),
+                border = BorderStroke(1.dp, Color(0xFFFECACA)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(
+                        text = "Dispatch Reliability Notice (${riderProfile?.penaltyPoints ?: 0} penalty pts)",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF991B1B)
+                    )
+                    Text(
+                        text = if (riderProfile?.dispatchCooldownUntil != null)
+                            "Auto-dispatch cooldown active until ${riderProfile.dispatchCooldownUntil}. Maintain justified responses and on-time handovers."
+                        else
+                            "Unjustified rejections: ${riderProfile?.unjustifiedRejectionsCount ?: 0}. Overdue deliveries: ${riderProfile?.overdueDeliveriesCount ?: 0}.",
+                        fontSize = 11.5.sp,
+                        color = Color(0xFFB91C1C)
+                    )
+                }
+            }
+        }
+
+        if (notifications.isNotEmpty()) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = Color.White,
+                border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Dispatch Notifications (${notifications.size})",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0F2C59)
+                    )
+                    notifications.take(3).forEach { notif ->
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (notif.type == "pickup_code") Color(0xFFECFDF5)
+                            else if (notif.type == "penalty" || notif.type == "warning") Color(0xFFFEF3C7)
+                            else Color(0xFFF8FAFC),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text(
+                                    text = notif.title,
+                                    fontSize = 12.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF1E293B)
+                                )
+                                Text(
+                                    text = notif.message,
+                                    fontSize = 11.5.sp,
+                                    color = Color(0xFF475569)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         // 6. 5-Page Sliding Banner (Context-specific operational notices from Bansi)
         HomeSlidingNoticeSection()
@@ -187,5 +331,6 @@ fun HomeScreen(
         )
 
         Spacer(modifier = Modifier.height(16.dp))
+        }
     }
 }

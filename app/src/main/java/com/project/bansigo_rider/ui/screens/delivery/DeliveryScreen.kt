@@ -21,12 +21,14 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.TwoWheeler
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -45,6 +47,7 @@ import com.project.bansigo_rider.core.models.DeliveryStatus
 import com.project.bansigo_rider.core.models.DeliverySummaryItem
 import com.project.bansigo_rider.core.models.GeoPoint
 import com.project.bansigo_rider.core.models.RiderNavigation
+import com.project.bansigo_rider.core.models.RiderNotification
 import com.project.bansigo_rider.core.network.ApiClient
 import com.project.bansigo_rider.core.storage.SessionManager
 import com.project.bansigo_rider.ui.components.BansiPrimaryButton
@@ -55,8 +58,17 @@ import com.project.bansigo_rider.ui.screens.delivery.sections.DeliveryMapSection
 import com.project.bansigo_rider.ui.screens.delivery.sections.DeliveryMultiOrderSelectorSection
 import com.project.bansigo_rider.ui.screens.delivery.sections.DeliveryNavigationSection
 import com.project.bansigo_rider.ui.theme.*
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.Context
+import android.content.pm.PackageManager
+import android.location.LocationManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DeliveryScreen(
     deliveryId: Int?,
@@ -68,6 +80,7 @@ fun DeliveryScreen(
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
 
     var activeDeliveries by remember { mutableStateOf<List<DeliverySummaryItem>>(emptyList()) }
     var selectedDeliveryId by remember { mutableIntStateOf(deliveryId ?: 0) }
@@ -75,6 +88,7 @@ fun DeliveryScreen(
     var navigation by remember { mutableStateOf<RiderNavigation?>(null) }
     var otherDropoffs by remember { mutableStateOf<List<GeoPoint>>(emptyList()) }
     var riderLocation by remember { mutableStateOf<GeoPoint?>(null) }
+    var pickupNotifs by remember { mutableStateOf<List<RiderNotification>>(emptyList()) }
 
     var isLoading by remember { mutableStateOf(true) }
     var isActionLoading by remember { mutableStateOf(false) }
@@ -107,6 +121,10 @@ fun DeliveryScreen(
         isLoading = true
         scope.launch {
             val activeRes = apiClient.getActiveDeliveries()
+            val notifRes = apiClient.getNotifications()
+            if (notifRes.isSuccess) {
+                pickupNotifs = notifRes.getOrNull().orEmpty().filter { it.type == "pickup_code" }
+            }
             if (activeRes.isSuccess) {
                 val list = activeRes.getOrNull().orEmpty().filter {
                     it.status != DeliveryStatus.DELIVERED &&
@@ -147,6 +165,22 @@ fun DeliveryScreen(
             selectedDeliveryId = deliveryId
         }
         refreshAllDeliveries()
+    }
+
+    // Keep riderLocation live on the map from device GPS (falling back to store/first waypoint until GPS fix arrives)
+    LaunchedEffect(selectedDeliveryId, deliveryDetail) {
+        while (true) {
+            val deviceLoc = readRiderDeviceLocation(context)
+            if (deviceLoc != null) {
+                riderLocation = deviceLoc
+                apiClient.updateLocation(deviceLoc.latitude, deviceLoc.longitude)
+            } else if (riderLocation == null) {
+                deliveryDetail?.pickupLocation?.let { store ->
+                    riderLocation = GeoPoint(store.latitude, store.longitude, "Your Position")
+                }
+            }
+            delay(4000L)
+        }
     }
 
     Scaffold(
@@ -192,6 +226,11 @@ fun DeliveryScreen(
                 }
             }
 
+            PullToRefreshBox(
+                isRefreshing = isLoading && deliveryDetail != null,
+                onRefresh = { refreshAllDeliveries() },
+                modifier = Modifier.fillMaxSize()
+            ) {
             if (isLoading && deliveryDetail == null) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -200,10 +239,11 @@ fun DeliveryScreen(
                     CircularProgressIndicator(color = RoyalNavy)
                 }
             } else if (deliveryDetail == null) {
-                // Empty state when no active delivery mission
+                // Empty state when no active delivery mission (scrollable for pull-to-refresh)
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
                         .padding(24.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -270,21 +310,8 @@ fun DeliveryScreen(
                                 selectedDeliveryId = newId
                                 loadSelectedDelivery(newId)
                             },
-                            onBatchPickupAll = {
-                                isBatchPickupLoading = true
-                                scope.launch {
-                                    val acceptedList = activeDeliveries.filter { it.status == DeliveryStatus.ACCEPTED }
-                                    var count = 0
-                                    for (d in acceptedList) {
-                                        val res = apiClient.pickupDelivery(d.id)
-                                        if (res.isSuccess) count++
-                                    }
-                                    isBatchPickupLoading = false
-                                    refreshAllDeliveries()
-                                    snackbarHostState.showSnackbar("Batch picked up $count orders at supermarket bay!")
-                                }
-                            },
-                            isBatchPickupLoading = isBatchPickupLoading
+                            onBatchPickupAll = null,
+                            isBatchPickupLoading = false
                         )
                     }
 
@@ -305,20 +332,25 @@ fun DeliveryScreen(
                     // Section 5: Recipient & Cargo Manifest Details
                     DeliveryItemsSection(delivery = currentDelivery)
 
-                    // Section 6: Action State Machine (Pickup, Arrive, Handover PIN, Report Issue)
+                    // Section 6: Action State Machine (Pickup Code, Arrive, Handover PIN, Report Issue)
+                    val matchingPickupNotif = pickupNotifs.firstOrNull {
+                        it.actionPayload == currentDelivery.deliveryId.toString() ||
+                            it.title.contains(currentDelivery.orderNumber)
+                    }
                     DeliveryActionsSection(
                         delivery = currentDelivery,
                         isActionLoading = isActionLoading,
-                        onPickup = {
+                        pickupCodeHint = matchingPickupNotif?.title,
+                        onPickup = { pickupCode ->
                             isActionLoading = true
                             scope.launch {
-                                val res = apiClient.pickupDelivery(currentDelivery.deliveryId)
+                                val res = apiClient.pickupDelivery(currentDelivery.deliveryId, pickupCode)
                                 isActionLoading = false
                                 if (res.isSuccess) {
                                     refreshAllDeliveries()
-                                    snackbarHostState.showSnackbar("Parcel marked picked up! Proceed to customer.")
+                                    snackbarHostState.showSnackbar("Pickup code verified! Proceed to customer.")
                                 } else {
-                                    snackbarHostState.showSnackbar(res.exceptionOrNull()?.localizedMessage ?: "Pickup failed")
+                                    snackbarHostState.showSnackbar(res.exceptionOrNull()?.localizedMessage ?: "Invalid pickup code")
                                 }
                             }
                         },
@@ -371,6 +403,29 @@ fun DeliveryScreen(
                     Spacer(modifier = Modifier.height(16.dp))
                 }
             }
+            }
         }
     }
+}
+
+@SuppressLint("MissingPermission")
+private fun readRiderDeviceLocation(context: Context): GeoPoint? {
+    val hasFine = ContextCompat.checkSelfPermission(
+        context, Manifest.permission.ACCESS_FINE_LOCATION
+    ) == PackageManager.PERMISSION_GRANTED
+    val hasCoarse = ContextCompat.checkSelfPermission(
+        context, Manifest.permission.ACCESS_COARSE_LOCATION
+    ) == PackageManager.PERMISSION_GRANTED
+    if (!hasFine && !hasCoarse) return null
+
+    val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return null
+    val providers = lm.getProviders(true)
+    var best: android.location.Location? = null
+    for (p in providers) {
+        val l = try { lm.getLastKnownLocation(p) } catch (_: Exception) { null } ?: continue
+        if (best == null || l.accuracy < best.accuracy) {
+            best = l
+        }
+    }
+    return best?.let { GeoPoint(it.latitude, it.longitude, "Your Live Position") }
 }

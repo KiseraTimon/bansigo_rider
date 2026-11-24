@@ -707,3 +707,175 @@ fun SplashEarningsIllustration(
         drawCircle(color = Color(0xFFFEF3C7), radius = 17f, center = coinCenter)
     }
 }
+
+/**
+ * Email Verification Code Entry Illustration
+ */
+@Composable
+fun EmailVerificationIllustration(
+    modifier: Modifier = Modifier,
+    width: Dp = 200.dp,
+    height: Dp = 160.dp
+) {
+    Canvas(modifier = modifier.size(width, height)) {
+        val w = this.size.width
+        val h = this.size.height
+
+        // Soft organic background blob
+        val bgBlob = Path().apply {
+            moveTo(w * 0.20f, h * 0.25f)
+            quadraticTo(w * 0.50f, h * 0.08f, w * 0.82f, h * 0.24f)
+            quadraticTo(w * 0.96f, h * 0.50f, w * 0.80f, h * 0.72f)
+            quadraticTo(w * 0.50f, h * 0.86f, w * 0.16f, h * 0.68f)
+            quadraticTo(w * 0.06f, h * 0.42f, w * 0.20f, h * 0.25f)
+            close()
+        }
+        drawPath(bgBlob, color = Color(0xFFEFF6FF))
+
+        // Decorative leafy accent on left
+        val stemPath = Path().apply {
+            moveTo(w * 0.22f, h * 0.74f)
+            quadraticTo(w * 0.15f, h * 0.52f, w * 0.24f, h * 0.30f)
+        }
+        drawPath(stemPath, color = Color(0xFF4C8E0F), style = Stroke(width = 3.5f, cap = StrokeCap.Round))
+        listOf(
+            Offset(w * 0.24f, h * 0.32f),
+            Offset(w * 0.19f, h * 0.42f),
+            Offset(w * 0.23f, h * 0.52f),
+            Offset(w * 0.18f, h * 0.62f)
+        ).forEach { pos ->
+            drawOval(
+                color = Color(0xFF65B718),
+                topLeft = Offset(pos.x - 7f, pos.y - 10f),
+                size = Size(14f, 20f)
+            )
+        }
+
+        // Main Envelope Body
+        val envW = w * 0.52f
+        val envH = h * 0.42f
+        val envX = w * 0.27f
+        val envY = h * 0.34f
+
+        drawRoundRect(
+            color = Color(0xFFFFFFFF),
+            topLeft = Offset(envX, envY),
+            size = Size(envW, envH),
+            cornerRadius = CornerRadius(14f, 14f)
+        )
+        drawRoundRect(
+            color = RoyalNavy,
+            topLeft = Offset(envX, envY),
+            size = Size(envW, envH),
+            cornerRadius = CornerRadius(14f, 14f),
+            style = Stroke(width = 5f)
+        )
+
+        // Envelope Flap
+        val flapPath = Path().apply {
+            moveTo(envX + 4f, envY + 6f)
+            lineTo(envX + envW / 2f, envY + envH * 0.56f)
+            lineTo(envX + envW - 4f, envY + 6f)
+        }
+        drawPath(
+            flapPath,
+            color = RoyalNavy,
+            style = Stroke(width = 4.5f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        )
+
+        // Notification / OTP Badge on top-right of envelope
+        val badgeCenter = Offset(envX + envW - 6f, envY + 6f)
+        drawCircle(color = AccentOrange, radius = 20f, center = badgeCenter)
+        drawCircle(color = Color.White, radius = 20f, center = badgeCenter, style = Stroke(width = 3.5f))
+        // Three small dots inside badge representing 6-digit code
+        drawCircle(color = Color.White, radius = 2.8f, center = Offset(badgeCenter.x - 7f, badgeCenter.y))
+        drawCircle(color = Color.White, radius = 2.8f, center = badgeCenter)
+        drawCircle(color = Color.White, radius = 2.8f, center = Offset(badgeCenter.x + 7f, badgeCenter.y))
+
+        // Ground shadow
+        drawOval(
+            color = Color(0xFFE2E8F0),
+            topLeft = Offset(w * 0.24f, h * 0.85f),
+            size = Size(w * 0.54f, 12f)
+        )
+    }
+}
+
+/**
+ * Email Verified Confirmation Success Illustration
+ */
+@Composable
+fun EmailVerifiedSuccessIllustration(
+    modifier: Modifier = Modifier,
+    width: Dp = 220.dp,
+    height: Dp = 190.dp
+) {
+    Canvas(modifier = modifier.size(width, height)) {
+        val w = this.size.width
+        val h = this.size.height
+
+        // Soft emerald organic background blob
+        val bgBlob = Path().apply {
+            moveTo(w * 0.22f, h * 0.20f)
+            quadraticTo(w * 0.52f, h * 0.06f, w * 0.82f, h * 0.22f)
+            quadraticTo(w * 0.94f, h * 0.48f, w * 0.78f, h * 0.74f)
+            quadraticTo(w * 0.48f, h * 0.88f, w * 0.18f, h * 0.70f)
+            quadraticTo(w * 0.06f, h * 0.42f, w * 0.22f, h * 0.20f)
+            close()
+        }
+        drawPath(bgBlob, color = Color(0xFFECFDF5))
+
+        // Outer soft halo ring
+        val center = Offset(w * 0.50f, h * 0.46f)
+        drawCircle(
+            color = Color(0xFFD1FAE5),
+            radius = w * 0.26f,
+            center = center
+        )
+
+        // Crisp white card / seal
+        drawCircle(
+            color = Color(0xFFFFFFFF),
+            radius = w * 0.20f,
+            center = center
+        )
+        drawCircle(
+            color = BansiGreen,
+            radius = w * 0.20f,
+            center = center,
+            style = Stroke(width = 6f)
+        )
+
+        // Inner emerald badge
+        drawCircle(
+            color = BansiGreen,
+            radius = w * 0.145f,
+            center = center
+        )
+
+        // Bold white checkmark
+        val checkPath = Path().apply {
+            moveTo(center.x - w * 0.065f, center.y + h * 0.005f)
+            lineTo(center.x - w * 0.015f, center.y + h * 0.060f)
+            lineTo(center.x + w * 0.075f, center.y - h * 0.055f)
+        }
+        drawPath(
+            checkPath,
+            color = Color.White,
+            style = Stroke(width = 8f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        )
+
+        // Celebratory sparkle accents
+        drawCircle(color = BansiGreen, radius = 6f, center = Offset(w * 0.22f, h * 0.26f))
+        drawCircle(color = Color(0xFFF59E0B), radius = 5f, center = Offset(w * 0.80f, h * 0.28f))
+        drawCircle(color = RoyalNavy, radius = 4.5f, center = Offset(w * 0.78f, h * 0.66f))
+        drawCircle(color = Color(0xFF10B981), radius = 5f, center = Offset(w * 0.24f, h * 0.66f))
+
+        // Ground shadow
+        drawOval(
+            color = Color(0xFFE2E8F0),
+            topLeft = Offset(w * 0.26f, h * 0.86f),
+            size = Size(w * 0.48f, 12f)
+        )
+    }
+}

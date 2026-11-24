@@ -23,8 +23,8 @@ data class AppConfig(
 
         // Bansi Mega Supermarket - Migori Hub
         const val SUPERMARKET_NAME = "Bansi Mega Supermarket"
-        const val SUPERMARKET_LATITUDE = -1.0641
-        const val SUPERMARKET_LONGITUDE = 34.4741
+        const val SUPERMARKET_LATITUDE = -1.061219
+        const val SUPERMARKET_LONGITUDE = 34.474196
         const val MAX_DELIVERY_RADIUS_KM = 7.0
         const val BASE_DELIVERY_FEE = 50.0
         const val DELIVERY_FEE_PER_KM = 20.0

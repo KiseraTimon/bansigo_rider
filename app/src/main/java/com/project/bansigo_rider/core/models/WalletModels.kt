@@ -9,8 +9,18 @@ data class WalletSummary(
     val weeklyEarnings: Double = 0.0,
     val completedTripsCount: Int,
     val pendingPayouts: Double = 0.0,
-    val averageTripFee: Double = 70.0,
+    val averageTripFee: Double = 0.0,
     val totalDistanceKm: Double = 0.0
+)
+
+data class RiderWalletResponse(
+    val summary: WalletSummary,
+    val transactions: List<TransactionRecord>
+)
+
+data class WithdrawResult(
+    val record: TransactionRecord,
+    val availableBalance: Double
 )
 
 data class TransactionRecord(

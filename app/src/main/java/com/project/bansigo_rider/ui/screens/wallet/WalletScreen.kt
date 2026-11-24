@@ -28,6 +28,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -38,6 +39,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -70,6 +72,7 @@ import java.util.Date
 import java.util.Locale
 import kotlin.random.Random
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WalletScreen(
     sessionManager: SessionManager,
@@ -82,100 +85,44 @@ fun WalletScreen(
 
     var showWithdrawDialog by remember { mutableStateOf(false) }
     var isWithdrawing by remember { mutableStateOf(false) }
+    var isRefreshing by remember { mutableStateOf(false) }
     var withdrawAmountText by remember { mutableStateOf("") }
     var withdrawError by remember { mutableStateOf<String?>(null) }
 
     var walletSummary by remember {
         mutableStateOf(
             WalletSummary(
-                totalEarnings = 2450.0,
-                availableBalance = 1680.0,
+                totalEarnings = 0.0,
+                availableBalance = 0.0,
                 codCashInHand = 0.0,
-                todayEarnings = 210.0,
-                weeklyEarnings = 2450.0,
-                completedTripsCount = 12,
+                todayEarnings = 0.0,
+                weeklyEarnings = 0.0,
+                completedTripsCount = 0,
                 pendingPayouts = 0.0,
-                averageTripFee = 70.0,
-                totalDistanceKm = 34.6
+                averageTripFee = 0.0,
+                totalDistanceKm = 0.0
             )
         )
     }
 
     var transactionHistory by remember {
-        mutableStateOf(
-            listOf(
-                TransactionRecord(
-                    id = "tx-1",
-                    orderNumber = "#1048",
-                    amount = 70.0,
-                    type = TransactionType.DELIVERY_EARNING,
-                    description = "Delivery Fee: Order #1048",
-                    timestamp = "Today, 11:30 AM",
-                    distanceKm = 2.4,
-                    status = "Completed",
-                    referenceCode = "EARN-1048"
-                ),
-                TransactionRecord(
-                    id = "tx-2",
-                    orderNumber = "#1045",
-                    amount = 70.0,
-                    type = TransactionType.DELIVERY_EARNING,
-                    description = "Delivery Fee: Order #1045",
-                    timestamp = "Today, 09:45 AM",
-                    distanceKm = 1.8,
-                    status = "Completed",
-                    referenceCode = "EARN-1045"
-                ),
-                TransactionRecord(
-                    id = "tx-3",
-                    orderNumber = "MPESA-B2C",
-                    amount = 500.0,
-                    type = TransactionType.PAYOUT_WITHDRAWAL,
-                    description = "M-Pesa Payout: 07** *** 744",
-                    timestamp = "Yesterday, 06:15 PM",
-                    status = "Settled",
-                    referenceCode = "QHK92841"
-                ),
-                TransactionRecord(
-                    id = "tx-4",
-                    orderNumber = "#1031",
-                    amount = 70.0,
-                    type = TransactionType.DELIVERY_EARNING,
-                    description = "Delivery Fee: Order #1031",
-                    timestamp = "Yesterday, 04:20 PM",
-                    distanceKm = 3.2,
-                    status = "Completed",
-                    referenceCode = "EARN-1031"
-                ),
-                TransactionRecord(
-                    id = "tx-5",
-                    orderNumber = "#1029",
-                    amount = 350.0,
-                    type = TransactionType.STORE_SETTLEMENT,
-                    description = "Accounts Desk Cash Remit",
-                    timestamp = "Yesterday, 03:00 PM",
-                    status = "Remitted",
-                    referenceCode = "REMIT-842"
-                )
-            )
-        )
+        mutableStateOf<List<TransactionRecord>>(emptyList())
     }
 
     fun refreshWallet() {
+        if (isRefreshing) return
         scope.launch {
-            val res = apiClient.getActiveDeliveries()
-            if (res.isSuccess) {
-                val list = res.getOrNull().orEmpty()
-                val delivered = list.filter { it.status == DeliveryStatus.DELIVERED }
-                if (delivered.isNotEmpty()) {
-                    val earningsToday = delivered.sumOf { it.riderFee }
-                    val currentBalance = walletSummary.availableBalance.coerceAtLeast(earningsToday)
-                    walletSummary = walletSummary.copy(
-                        completedTripsCount = walletSummary.completedTripsCount.coerceAtLeast(delivered.size),
-                        todayEarnings = earningsToday,
-                        availableBalance = currentBalance
-                    )
+            isRefreshing = true
+            try {
+                val res = apiClient.getRiderWallet()
+                if (res.isSuccess) {
+                    res.getOrNull()?.let { wallet ->
+                        walletSummary = wallet.summary
+                        transactionHistory = wallet.transactions
+                    }
                 }
+            } finally {
+                isRefreshing = false
             }
         }
     }
@@ -218,13 +165,18 @@ fun WalletScreen(
                 }
             }
 
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(scrollState)
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+            PullToRefreshBox(
+                isRefreshing = isRefreshing,
+                onRefresh = { refreshWallet() },
+                modifier = Modifier.fillMaxSize()
             ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(scrollState)
+                        .padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
                 // Section 1: Hero Available Balance & Instant M-Pesa Payout
                 WalletBalanceSection(
                     wallet = walletSummary,
@@ -245,17 +197,22 @@ fun WalletScreen(
                 WalletHistorySection(records = transactionHistory)
 
                 Spacer(modifier = Modifier.height(16.dp))
+                }
             }
         }
     }
 
     // Interactive M-Pesa Payout Modal
     if (showWithdrawDialog) {
-        val phoneNumber = "254700226744"
+        val phoneNumber = sessionManager.getPhone().trim().ifEmpty { "254700000000" }
+        val displayPhone = if (phoneNumber.startsWith("+")) phoneNumber else "+$phoneNumber"
         val maxAvailable = walletSummary.availableBalance
 
         AlertDialog(
             onDismissRequest = { if (!isWithdrawing) showWithdrawDialog = false },
+            containerColor = SurfaceLight,
+            titleContentColor = RoyalNavyDark,
+            textContentColor = TextPrimary,
             title = {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -302,7 +259,7 @@ fun WalletScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(text = "Destination Account", fontSize = 11.sp, color = TextMuted)
-                            Text(text = "+$phoneNumber", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                            Text(text = displayPhone, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
                         }
                     }
 
@@ -423,28 +380,19 @@ fun WalletScreen(
                             else -> {
                                 isWithdrawing = true
                                 scope.launch {
-                                    kotlinx.coroutines.delay(1000) // Realistic network simulation
-                                    val newBalance = (maxAvailable - amount).coerceAtLeast(0.0)
-                                    walletSummary = walletSummary.copy(availableBalance = newBalance)
-
-                                    val mpesaRef = "QK" + Random.nextInt(100000, 999999)
-                                    val timeStr = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())
-
-                                    val newRecord = TransactionRecord(
-                                        id = "tx-${System.currentTimeMillis()}",
-                                        orderNumber = "MPESA-B2C",
-                                        amount = amount,
-                                        type = TransactionType.PAYOUT_WITHDRAWAL,
-                                        description = "M-Pesa Payout: +$phoneNumber",
-                                        timestamp = "Today, $timeStr",
-                                        status = "Settled",
-                                        referenceCode = mpesaRef
-                                    )
-
-                                    transactionHistory = listOf(newRecord) + transactionHistory
+                                    val res = apiClient.withdrawRiderWallet(amount, phoneNumber)
                                     isWithdrawing = false
-                                    showWithdrawDialog = false
-                                    snackbarHostState.showSnackbar("KES ${amount.toInt()} sent to M-Pesa ($mpesaRef) successfully!")
+                                    if (res.isSuccess) {
+                                        val result = res.getOrNull()!!
+                                        walletSummary = walletSummary.copy(availableBalance = result.availableBalance)
+                                        transactionHistory = listOf(result.record) + transactionHistory
+                                        showWithdrawDialog = false
+                                        snackbarHostState.showSnackbar(
+                                            "KES ${amount.toInt()} sent to M-Pesa (${result.record.referenceCode}) successfully!"
+                                        )
+                                    } else {
+                                        withdrawError = res.exceptionOrNull()?.message ?: "Withdrawal failed"
+                                    }
                                 }
                             }
                         }

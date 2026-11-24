@@ -563,7 +563,12 @@ class ApiClient(private val sessionManager: SessionManager) {
                             riderFee = obj.optDouble("rider_fee", 50.0),
                             estimatedDistanceM = if (obj.isNull("estimated_distance_m")) null else obj.optInt("estimated_distance_m"),
                             estimatedDurationS = if (obj.isNull("estimated_duration_s")) null else obj.optInt("estimated_duration_s"),
-                            assignedAt = if (obj.isNull("assigned_at")) null else obj.optString("assigned_at")
+                            assignedAt = if (obj.isNull("assigned_at")) null else obj.optString("assigned_at"),
+                            offerExpiresAt = if (obj.isNull("offer_expires_at")) null else obj.optString("offer_expires_at"),
+                            pickupDueAt = if (obj.isNull("pickup_due_at")) null else obj.optString("pickup_due_at"),
+                            deliveryDueAt = if (obj.isNull("delivery_due_at")) null else obj.optString("delivery_due_at"),
+                            isOverdue = obj.optBoolean("is_overdue", false),
+                            rejectionCount = obj.optInt("rejection_count", 0)
                         )
                     )
                 }
@@ -598,6 +603,14 @@ class ApiClient(private val sessionManager: SessionManager) {
                     }
                 }
 
+                val itemsSummaryList = mutableListOf<String>()
+                val itemsSummaryArray = obj.optJSONArray("items_summary")
+                if (itemsSummaryArray != null) {
+                    for (i in 0 until itemsSummaryArray.length()) {
+                        itemsSummaryList.add(itemsSummaryArray.optString(i))
+                    }
+                }
+
                 val detail = DeliveryDetail(
                     deliveryId = obj.getInt("delivery_id"),
                     orderId = obj.getInt("order_id"),
@@ -625,7 +638,12 @@ class ApiClient(private val sessionManager: SessionManager) {
                     estimatedDistanceM = if (obj.isNull("estimated_distance_m")) null else obj.optInt("estimated_distance_m"),
                     estimatedDurationS = if (obj.isNull("estimated_duration_s")) null else obj.optInt("estimated_duration_s"),
                     routingAlgorithm = obj.optString("routing_algorithm", "dijkstra"),
-                    routeWaypoints = waypointsList
+                    routeWaypoints = waypointsList,
+                    itemsSummary = itemsSummaryList,
+                    offerExpiresAt = if (obj.isNull("offer_expires_at")) null else obj.optString("offer_expires_at"),
+                    pickupDueAt = if (obj.isNull("pickup_due_at")) null else obj.optString("pickup_due_at"),
+                    deliveryDueAt = if (obj.isNull("delivery_due_at")) null else obj.optString("delivery_due_at"),
+                    isOverdue = obj.optBoolean("is_overdue", false)
                 )
                 Result.success(detail)
             }
@@ -634,9 +652,18 @@ class ApiClient(private val sessionManager: SessionManager) {
         }
     }
 
-    suspend fun respondToOffer(deliveryId: Int, accept: Boolean): Result<Boolean> = withContext(Dispatchers.IO) {
+    suspend fun respondToOffer(
+        deliveryId: Int,
+        accept: Boolean,
+        reasonCode: String? = null,
+        reasonText: String? = null
+    ): Result<Boolean> = withContext(Dispatchers.IO) {
         val url = getBaseUrl() + ApiEndpoints.deliveryRespond(deliveryId)
-        val json = JSONObject().apply { put("accept", accept) }
+        val json = JSONObject().apply {
+            put("accept", accept)
+            if (!reasonCode.isNullOrBlank()) put("reason_code", reasonCode.trim())
+            if (!reasonText.isNullOrBlank()) put("reason_text", reasonText.trim())
+        }
         val request = Request.Builder()
             .url(url)
             .post(json.toString().toRequestBody(jsonMediaType))
@@ -651,16 +678,63 @@ class ApiClient(private val sessionManager: SessionManager) {
         }
     }
 
-    suspend fun pickupDelivery(deliveryId: Int): Result<Boolean> = withContext(Dispatchers.IO) {
+    suspend fun pickupDelivery(deliveryId: Int, pickupCode: String): Result<Boolean> = withContext(Dispatchers.IO) {
         val url = getBaseUrl() + ApiEndpoints.deliveryPickup(deliveryId)
+        val json = JSONObject().apply { put("pickup_code", pickupCode.trim()) }
         val request = Request.Builder()
             .url(url)
-            .post("{}".toRequestBody(jsonMediaType))
+            .post(json.toString().toRequestBody(jsonMediaType))
             .build()
         try {
             client.newCall(request).execute().use { response ->
                 if (response.isSuccessful) Result.success(true)
                 else Result.failure(IOException(parseErrorMessage(response.body?.string().orEmpty(), "Pickup failed")))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getNotifications(): Result<List<RiderNotification>> = withContext(Dispatchers.IO) {
+        val url = getBaseUrl() + ApiEndpoints.RIDER_NOTIFICATIONS
+        val request = Request.Builder().url(url).get().build()
+        try {
+            client.newCall(request).execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    return@withContext Result.failure(IOException(parseErrorMessage(body, "Failed to load notifications")))
+                }
+                val root = JSONObject(body)
+                val itemsArray = root.optJSONArray("items") ?: JSONArray()
+                val list = mutableListOf<RiderNotification>()
+                for (i in 0 until itemsArray.length()) {
+                    val item = itemsArray.getJSONObject(i)
+                    list.add(
+                        RiderNotification(
+                            id = item.optString("id"),
+                            title = item.optString("title"),
+                            message = item.optString("message"),
+                            type = item.optString("type", "system"),
+                            createdAt = item.optString("created_at", ""),
+                            isRead = item.optBoolean("is_read", false),
+                            actionType = if (item.isNull("action_type")) null else item.optString("action_type"),
+                            actionPayload = if (item.isNull("action_payload")) null else item.optString("action_payload")
+                        )
+                    )
+                }
+                Result.success(list)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun markNotificationRead(id: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        val url = getBaseUrl() + ApiEndpoints.notificationRead(id)
+        val request = Request.Builder().url(url).patch("{}".toRequestBody(jsonMediaType)).build()
+        try {
+            client.newCall(request).execute().use { response ->
+                Result.success(response.isSuccessful)
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -748,13 +822,19 @@ class ApiClient(private val sessionManager: SessionManager) {
                 if (stepsArray != null) {
                     for (i in 0 until stepsArray.length()) {
                         val s = stepsArray.getJSONObject(i)
+                        val rawInstruction = if (s.isNull("instruction")) "" else s.optString("instruction", "")
+                        val rawStreet = if (s.isNull("street_name")) "" else s.optString("street_name", "")
+                        val rawType = if (s.isNull("type")) "straight" else s.optString("type", "straight")
+                        val street = rawStreet.takeIf { it.isNotBlank() && it != "null" } ?: ""
+                        val instruction = rawInstruction.takeIf { it.isNotBlank() && it != "null" }
+                            ?: if (street.isNotBlank()) "Continue on $street" else "Follow route"
                         stepsList.add(
                             NavigationStep(
-                                instruction = s.optString("instruction", "Continue"),
+                                instruction = instruction,
                                 distanceM = s.optInt("distance_m", 0),
                                 durationS = s.optInt("duration_s", 0),
-                                streetName = s.optString("street_name", ""),
-                                type = s.optString("type", "straight")
+                                streetName = street,
+                                type = rawType.ifBlank { "straight" }
                             )
                         )
                     }
@@ -789,19 +869,106 @@ class ApiClient(private val sessionManager: SessionManager) {
         }
     }
 
+    suspend fun getRiderWallet(): Result<RiderWalletResponse> = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder()
+                .url("${getBaseUrl()}${ApiEndpoints.RIDER_WALLET}")
+                .get()
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val body = response.body?.string() ?: "{}"
+                if (!response.isSuccessful) {
+                    return@withContext Result.failure(IOException(parseErrorMessage(body, "Failed to load wallet")))
+                }
+                val obj = JSONObject(body)
+                val summary = WalletSummary(
+                    totalEarnings = obj.optDouble("total_earnings", 0.0),
+                    availableBalance = obj.optDouble("available_balance", 0.0),
+                    codCashInHand = obj.optDouble("cod_cash_in_hand", 0.0),
+                    todayEarnings = obj.optDouble("today_earnings", 0.0),
+                    weeklyEarnings = obj.optDouble("weekly_earnings", 0.0),
+                    completedTripsCount = obj.optInt("completed_trips_count", 0),
+                    pendingPayouts = obj.optDouble("pending_payouts", 0.0),
+                    averageTripFee = obj.optDouble("average_trip_fee", 0.0),
+                    totalDistanceKm = obj.optDouble("total_distance_km", 0.0)
+                )
+                val txArray = obj.optJSONArray("transactions") ?: JSONArray()
+                val txList = (0 until txArray.length()).map { i ->
+                    val t = txArray.getJSONObject(i)
+                    val type = when (t.optString("type", "DELIVERY_EARNING")) {
+                        "PAYOUT_WITHDRAWAL" -> TransactionType.PAYOUT_WITHDRAWAL
+                        "COD_COLLECTED" -> TransactionType.COD_COLLECTED
+                        "STORE_SETTLEMENT" -> TransactionType.STORE_SETTLEMENT
+                        else -> TransactionType.DELIVERY_EARNING
+                    }
+                    TransactionRecord(
+                        id = t.optString("id", "tx-$i"),
+                        orderNumber = t.optString("order_number", ""),
+                        amount = t.optDouble("amount", 0.0),
+                        type = type,
+                        description = t.optString("description", ""),
+                        timestamp = t.optString("timestamp", "-"),
+                        distanceKm = if (t.isNull("distance_km")) null else t.optDouble("distance_km"),
+                        status = t.optString("status", "Completed"),
+                        referenceCode = if (t.isNull("reference_code")) null else t.optString("reference_code")
+                    )
+                }
+                Result.success(RiderWalletResponse(summary = summary, transactions = txList))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun withdrawRiderWallet(amount: Double, phone: String): Result<WithdrawResult> = withContext(Dispatchers.IO) {
+        try {
+            val payload = JSONObject().apply {
+                put("amount", amount)
+                put("phone", phone)
+            }
+            val request = Request.Builder()
+                .url("${getBaseUrl()}${ApiEndpoints.RIDER_WALLET_WITHDRAW}")
+                .post(payload.toString().toRequestBody(jsonMediaType))
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val body = response.body?.string() ?: "{}"
+                if (!response.isSuccessful) {
+                    return@withContext Result.failure(IOException(parseErrorMessage(body, "Withdrawal failed")))
+                }
+                val obj = JSONObject(body)
+                val record = TransactionRecord(
+                    id = "payout-${obj.optInt("id", 0)}",
+                    orderNumber = "MPESA-B2C",
+                    amount = obj.optDouble("amount", amount),
+                    type = TransactionType.PAYOUT_WITHDRAWAL,
+                    description = "M-Pesa Payout: ${obj.optString("phone", phone)}",
+                    timestamp = obj.optString("timestamp", "Just now"),
+                    status = obj.optString("status", "Settled"),
+                    referenceCode = obj.optString("reference_code", "")
+                )
+                val newBalance = obj.optDouble("available_balance", 0.0)
+                Result.success(WithdrawResult(record = record, availableBalance = newBalance))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     // ----------------------------------------------------
     // PARSING HELPERS
     // ----------------------------------------------------
 
     private fun parseRiderProfile(json: JSONObject): RiderProfile {
-        val appStatusStr = json.optString("approval_status", "pending").uppercase()
+        val appStatusStr = json.optString("approval_status", "new").uppercase()
         val riderStatusStr = json.optString("status", "offline").uppercase()
         val vehicleTypeStr = json.optString("vehicle_type", "motorcycle").uppercase()
 
         val approvalStatus = try {
             ApprovalStatus.valueOf(appStatusStr)
         } catch (_: Exception) {
-            ApprovalStatus.PENDING
+            ApprovalStatus.NEW
         }
 
         val status = try {
@@ -834,7 +1001,12 @@ class ApiClient(private val sessionManager: SessionManager) {
             ratingAverage = if (json.isNull("rating_average")) null else json.optDouble("rating_average"),
             ratingCount = json.optInt("rating_count", 0),
             deliveriesCompleted = json.optInt("deliveries_completed", 0),
-            lastSeenAt = if (json.isNull("last_seen_at")) null else json.optString("last_seen_at")
+            lastSeenAt = if (json.isNull("last_seen_at")) null else json.optString("last_seen_at"),
+            unjustifiedRejectionsCount = json.optInt("unjustified_rejections_count", 0),
+            totalRejectionsCount = json.optInt("total_rejections_count", 0),
+            overdueDeliveriesCount = json.optInt("overdue_deliveries_count", 0),
+            penaltyPoints = json.optInt("penalty_points", 0),
+            dispatchCooldownUntil = if (json.isNull("dispatch_cooldown_until")) null else json.optString("dispatch_cooldown_until")
         )
     }
 

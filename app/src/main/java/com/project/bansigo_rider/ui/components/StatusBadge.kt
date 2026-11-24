@@ -77,6 +77,7 @@ fun RiderStatusBadge(status: RiderStatus, modifier: Modifier = Modifier) {
 @Composable
 fun ApprovalStatusBadge(status: ApprovalStatus, modifier: Modifier = Modifier) {
     val (bg, fg) = when (status) {
+        ApprovalStatus.NEW -> Pair(Color(0xFFE0F2FE), Color(0xFF0369A1))
         ApprovalStatus.APPROVED -> Pair(BansiGreenLight, BansiGreenDark)
         ApprovalStatus.PENDING -> Pair(Color(0xFFFEF3C7), Color(0xFFB45309))
         ApprovalStatus.REJECTED -> Pair(BansiCrimsonLight, BansiCrimsonDark)

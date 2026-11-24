@@ -57,7 +57,11 @@ data class DeliveryDetail(
     val estimatedDurationS: Int? = null,
     val routingAlgorithm: String? = null,
     val routeWaypoints: List<GeoPoint> = emptyList(),
-    val itemsSummary: List<String> = emptyList()
+    val itemsSummary: List<String> = emptyList(),
+    val offerExpiresAt: String? = null,
+    val pickupDueAt: String? = null,
+    val deliveryDueAt: String? = null,
+    val isOverdue: Boolean = false
 )
 
 data class DeliverySummaryItem(
@@ -68,5 +72,21 @@ data class DeliverySummaryItem(
     val estimatedDistanceM: Int?,
     val estimatedDurationS: Int?,
     val destinationAddress: String = "Migori Town",
-    val assignedAt: String? = null
+    val assignedAt: String? = null,
+    val offerExpiresAt: String? = null,
+    val pickupDueAt: String? = null,
+    val deliveryDueAt: String? = null,
+    val isOverdue: Boolean = false,
+    val rejectionCount: Int = 0
+)
+
+data class RiderNotification(
+    val id: String,
+    val title: String,
+    val message: String,
+    val type: String,
+    val createdAt: String,
+    val isRead: Boolean = false,
+    val actionType: String? = null,
+    val actionPayload: String? = null
 )

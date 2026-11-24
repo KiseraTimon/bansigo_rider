@@ -108,6 +108,24 @@ fun DeliveryHeaderSection(
             // Step Timeline: Accepted -> Picked Up -> Arrived -> Delivered
             DeliveryProgressTimeline(currentStatus = delivery.status)
 
+            if (delivery.isOverdue) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFFFEF2F2),
+                    border = BorderStroke(1.dp, Color(0xFFFECACA)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "OVERDUE SLA: Complete pickup/handover immediately to avoid penalty points.",
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFB91C1C),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+                    )
+                }
+            }
+
             Spacer(modifier = Modifier.height(14.dp))
 
             // Fee and Payment Summary Row
@@ -164,8 +182,9 @@ fun DeliveryHeaderSection(
 
 @Composable
 private fun DeliveryProgressTimeline(currentStatus: DeliveryStatus) {
+    val firstLabel = if (currentStatus == DeliveryStatus.ASSIGNED) "Offer" else "Accepted"
     val steps = listOf(
-        Pair("Accepted", DeliveryStatus.ACCEPTED),
+        Pair(firstLabel, DeliveryStatus.ACCEPTED),
         Pair("Picked Up", DeliveryStatus.PICKED_UP),
         Pair("Arrived", DeliveryStatus.ARRIVED),
         Pair("Delivered", DeliveryStatus.DELIVERED)

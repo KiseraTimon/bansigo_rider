@@ -59,6 +59,7 @@ import com.project.bansigo_rider.ui.screens.options.sections.OptionsEmailVerific
 import com.project.bansigo_rider.ui.screens.options.sections.OptionsHubSection
 import com.project.bansigo_rider.ui.screens.options.sections.OptionsPaymentMethodsSection
 import com.project.bansigo_rider.ui.screens.options.sections.OptionsPreferencesSection
+import com.project.bansigo_rider.ui.screens.options.sections.OptionsRiderReviewsSection
 import com.project.bansigo_rider.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -68,6 +69,7 @@ enum class OptionsSubPage {
     EMAIL_VERIFICATION,
     BUSINESS,
     BUSINESS_WIZARD,
+    REVIEWS,
     PAYMENT,
     CONTACT,
     PREFERENCES
@@ -214,6 +216,7 @@ fun OptionsScreen(
                         riderProfile = activeProfile,
                         onNavigateToAccount = { currentPage = OptionsSubPage.ACCOUNT },
                         onNavigateToBusiness = { currentPage = OptionsSubPage.BUSINESS },
+                        onNavigateToReviews = { currentPage = OptionsSubPage.REVIEWS },
                         onNavigateToPayment = { currentPage = OptionsSubPage.PAYMENT },
                         onNavigateToContact = { currentPage = OptionsSubPage.CONTACT },
                         onNavigateToPreferences = { currentPage = OptionsSubPage.PREFERENCES },
@@ -284,6 +287,13 @@ fun OptionsScreen(
                     )
                 }
 
+                OptionsSubPage.REVIEWS -> {
+                    OptionsRiderReviewsSection(
+                        apiClient = apiClient,
+                        onBackClick = { currentPage = OptionsSubPage.HUB }
+                    )
+                }
+
                 OptionsSubPage.PAYMENT -> {
                     OptionsPaymentMethodsSection(
                         mpesaPhone = phone,
@@ -320,6 +330,7 @@ private fun OptionsHubContent(
     riderProfile: RiderProfile?,
     onNavigateToAccount: () -> Unit,
     onNavigateToBusiness: () -> Unit,
+    onNavigateToReviews: () -> Unit,
     onNavigateToPayment: () -> Unit,
     onNavigateToContact: () -> Unit,
     onNavigateToPreferences: () -> Unit,
@@ -417,6 +428,7 @@ private fun OptionsHubContent(
                     riderProfile = riderProfile,
                     onNavigateToAccount = onNavigateToAccount,
                     onNavigateToBusiness = onNavigateToBusiness,
+                    onNavigateToReviews = onNavigateToReviews,
                     onNavigateToPayment = onNavigateToPayment,
                     onNavigateToContact = onNavigateToContact,
                     onNavigateToPreferences = onNavigateToPreferences,

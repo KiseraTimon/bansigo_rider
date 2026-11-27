@@ -100,8 +100,8 @@ fun HomeMetricsPreviewSection(
 
             MetricCard(
                 title = "Fleet Rating",
-                value = ratingAverage?.let { String.format("%.1f ★", it) } ?: "5.0 ★",
-                subtext = "Customer Satisfaction",
+                value = ratingAverage?.let { String.format("%.1f ★", it) } ?: "New",
+                subtext = if (ratingAverage != null) "Customer Satisfaction" else "Awaiting reviews",
                 icon = Icons.Default.Star,
                 iconTint = Color(0xFFF59E0B),
                 iconBg = Color(0xFFFEF3C7),

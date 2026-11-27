@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.HeadsetMic
 import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Card
@@ -62,6 +63,7 @@ fun OptionsHubSection(
     riderProfile: RiderProfile?,
     onNavigateToAccount: () -> Unit,
     onNavigateToBusiness: () -> Unit,
+    onNavigateToReviews: () -> Unit,
     onNavigateToPayment: () -> Unit,
     onNavigateToContact: () -> Unit,
     onNavigateToPreferences: () -> Unit,
@@ -70,7 +72,7 @@ fun OptionsHubSection(
     modifier: Modifier = Modifier
 ) {
     val initials = rememberInitials(fullName, username)
-    val hasUnverified = !isEmailVerified || !isPhoneVerified
+    val hasUnverified = !isEmailVerified
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -220,7 +222,24 @@ fun OptionsHubSection(
 
                 HorizontalDivider(color = BorderLight, thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
 
-                // Item 3: Payment Methods
+                // Item 3: Customer Ratings & Reviews
+                val ratingBadge = riderProfile?.ratingAverage?.let {
+                    String.format("%.1f ★ (%d)", it, riderProfile.ratingCount)
+                }
+                OptionNavRow(
+                    icon = Icons.Default.Star,
+                    iconBg = Color(0xFFFEF3C7),
+                    iconTint = Color(0xFFD97706),
+                    title = "Customer Ratings & Feedback",
+                    subtitle = "View delivery ratings & customer comments",
+                    badge = ratingBadge,
+                    badgeColor = Color(0xFFD97706),
+                    onClick = onNavigateToReviews
+                )
+
+                HorizontalDivider(color = BorderLight, thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
+
+                // Item 4: Payment Methods
                 OptionNavRow(
                     icon = Icons.Default.Payments,
                     iconBg = Color(0xFFF0FDF4),

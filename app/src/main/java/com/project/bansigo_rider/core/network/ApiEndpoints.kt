@@ -24,6 +24,7 @@ object ApiEndpoints {
     const val RIDER_NOTIFICATIONS_READ_ALL = "/rider/notifications/read-all"
     const val RIDER_WALLET = "/rider/wallet"
     const val RIDER_WALLET_WITHDRAW = "/rider/wallet/withdraw"
+    const val RIDER_REVIEWS = "/rider/reviews"
 
     fun deliveryDetail(id: Int): String = "/rider/deliveries/$id"
     fun deliveryRespond(id: Int): String = "/rider/deliveries/$id/respond"

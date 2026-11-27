@@ -956,6 +956,50 @@ class ApiClient(private val sessionManager: SessionManager) {
         }
     }
 
+    suspend fun getRiderReviews(): Result<RiderReviewsResponse> = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder()
+                .url("${getBaseUrl()}${ApiEndpoints.RIDER_REVIEWS}")
+                .get()
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val body = response.body?.string() ?: "{}"
+                if (!response.isSuccessful) {
+                    return@withContext Result.failure(IOException(parseErrorMessage(body, "Failed to load reviews")))
+                }
+                val obj = JSONObject(body)
+                val avgRating = if (obj.isNull("average_rating")) {
+                    null
+                } else {
+                    obj.optString("average_rating", "").toDoubleOrNull()
+                }
+                val revArray = obj.optJSONArray("reviews") ?: JSONArray()
+                val reviews = (0 until revArray.length()).map { i ->
+                    val r = revArray.getJSONObject(i)
+                    RiderReviewItem(
+                        id = r.optInt("id", i),
+                        customerName = r.optString("customer_name", "Verified Shopper"),
+                        orderNumber = if (r.isNull("order_number")) null else r.optString("order_number"),
+                        rating = r.optInt("rating", 5),
+                        comment = if (r.isNull("comment")) null else r.optString("comment"),
+                        createdAt = r.optString("created_at", "")
+                    )
+                }
+                Result.success(
+                    RiderReviewsResponse(
+                        riderId = obj.optInt("rider_id", 0),
+                        averageRating = avgRating,
+                        ratingCount = obj.optInt("rating_count", reviews.size),
+                        reviews = reviews
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     // ----------------------------------------------------
     // PARSING HELPERS
     // ----------------------------------------------------

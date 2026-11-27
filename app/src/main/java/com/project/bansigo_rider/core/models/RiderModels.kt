@@ -60,3 +60,19 @@ data class RiderApplyRequest(
     val licenceExpiry: String? = null,
     val drivingLicenceUrl: String? = null
 )
+
+data class RiderReviewItem(
+    val id: Int,
+    val customerName: String,
+    val orderNumber: String?,
+    val rating: Int,
+    val comment: String?,
+    val createdAt: String
+)
+
+data class RiderReviewsResponse(
+    val riderId: Int,
+    val averageRating: Double?,
+    val ratingCount: Int,
+    val reviews: List<RiderReviewItem>
+)

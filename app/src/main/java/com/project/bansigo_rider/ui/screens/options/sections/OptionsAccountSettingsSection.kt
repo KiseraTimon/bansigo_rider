@@ -82,10 +82,6 @@ fun OptionsAccountSettingsSection(
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var isError by remember { mutableStateOf(false) }
 
-    // Dialog state for phone verification
-    var showPhoneOtpDialog by remember { mutableStateOf(false) }
-    var phoneOtpInput by remember { mutableStateOf("") }
-
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
 
@@ -360,29 +356,19 @@ fun OptionsAccountSettingsSection(
                             } else {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
-                                        imageVector = Icons.Default.WarningAmber,
+                                        imageVector = Icons.Default.Phone,
                                         contentDescription = null,
-                                        tint = Color(0xFFD97706),
+                                        tint = TextSecondary,
                                         modifier = Modifier.size(14.dp)
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = "Unverified Phone Number",
+                                        text = "Used for dispatch & M-Pesa payouts (save changes below)",
                                         fontSize = 11.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = Color(0xFFD97706)
+                                        fontWeight = FontWeight.Medium,
+                                        color = TextSecondary
                                     )
                                 }
-
-                                Text(
-                                    text = "Verify Phone",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = RoyalNavy,
-                                    modifier = Modifier.clickable {
-                                        showPhoneOtpDialog = true
-                                    }
-                                )
                             }
                         }
                     }
@@ -536,69 +522,6 @@ fun OptionsAccountSettingsSection(
 
             Spacer(modifier = Modifier.height(16.dp))
         }
-    }
-
-    // Phone OTP Dialog
-    if (showPhoneOtpDialog) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showPhoneOtpDialog = false },
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.VerifiedUser,
-                        contentDescription = null,
-                        tint = RoyalNavy,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Verify Phone Number",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = RoyalNavy
-                    )
-                }
-            },
-            text = {
-                Column {
-                    Text(
-                        text = "An SMS with your 4-digit verification code has been dispatched to $phone.",
-                        fontSize = 13.sp,
-                        color = TextSecondary
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    BansiTextField(
-                        value = phoneOtpInput,
-                        onValueChange = { phoneOtpInput = it },
-                        label = "SMS Code *",
-                        placeholder = "e.g. 7821",
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                    )
-                }
-            },
-            confirmButton = {
-                BansiPrimaryButton(
-                    text = "Verify SMS",
-                    onClick = {
-                        if (phoneOtpInput.isBlank()) return@BansiPrimaryButton
-                        isPhoneVerified = true
-                        sessionManager.setPhoneVerified(true)
-                        showPhoneOtpDialog = false
-                        statusMessage = "Phone number verified for fleet operations."
-                        isError = false
-                    },
-                    modifier = Modifier.width(130.dp),
-                    backgroundColor = BansiGreenDark
-                )
-            },
-            dismissButton = {
-                TextButton(onClick = { showPhoneOtpDialog = false }) {
-                    Text("Cancel", color = TextSecondary)
-                }
-            },
-            shape = RoundedCornerShape(16.dp),
-            containerColor = SurfaceLight
-        )
     }
 }
 
